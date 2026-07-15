@@ -13,16 +13,32 @@ linters:
     - gosec
     - goconst
     - misspell
+    - forbidigo
   exclusions:
     rules:
       # The test/ directory holds standalone integration-test scaffolding
       # (e.g. mock-server.go, package main). goconst's ignore-tests only
       # matches *_test.go files, so exempt the whole test/ tree explicitly —
       # constant-extraction adds no value to throwaway test harnesses.
+      # forbidigo: the mock server and sample repo legitimately print to stdout.
       - path: ^test/
         linters:
           - goconst
+          - forbidigo
+      # Test code may print freely; the stdout convention applies to the CLI.
+      - path: _test\.go$
+        linters:
+          - forbidigo
   settings:
+    forbidigo:
+      forbid:
+        # Convention: all human-facing output (spinners, styled text, status)
+        # goes to stderr; only machine-consumable results go to stdout. A stray
+        # Println corrupts JSON/SARIF output for CI consumers. Intentional
+        # stdout writes (e.g. `auth` printing the raw token for piping) carry
+        # //nolint:forbidigo with a reason.
+        - pattern: ^fmt\.Print(ln|f)?$
+          msg: writes to stdout — use fmt.Fprint*(os.Stderr, ...) or the formatter's io.Writer; only scan results/pipeable output go to stdout (add //nolint:forbidigo with a reason if intentional)
     goconst:
       ignore-tests: true
     gosec:

@@ -76,6 +76,6 @@ func runAuth(cmd *cobra.Command, _ []string) error {
 
 	// Print the raw token without any prefix (useful for piping to other tools).
 	// armis:ignore cwe:522 reason:auth token command's purpose is to output the token for piping to other tools
-	fmt.Println(token)
+	fmt.Println(token) //nolint:forbidigo // stdout is the contract: the token must be pipeable
 	return nil
 }

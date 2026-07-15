@@ -411,7 +411,7 @@ func runInitEnv(pms []string) error {
 	if scInitDryRun {
 		fmt.Fprintf(os.Stderr, "%s\n\n", s.MutedText.Render("Would print eval command:"))
 	}
-	fmt.Print(block)
+	fmt.Print(block) //nolint:forbidigo // stdout is the contract: consumed via eval "$(armis-cli supply-chain init --mode env)"
 	if !scInitDryRun {
 		fmt.Fprintf(os.Stderr, "\n%s %s\n", s.MutedText.Render("Usage:"), s.Bold.Render("eval \"$(armis-cli supply-chain init --mode env)\""))
 	}
