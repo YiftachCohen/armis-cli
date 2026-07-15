@@ -110,6 +110,14 @@ All styles are defined in `internal/output/styles.go` using `lipgloss.AdaptiveCo
 
 Tests use table-driven patterns. Mock HTTP responses with `internal/testutil/httptest.go`. The `test/` directory contains a mock server and sample repository for integration testing.
 
+### Choosing a test command (keep output lean)
+
+The suite has ~1000 test functions; `make test` runs them all verbosely (one testdox line per test plus a per-function coverage table) and floods the terminal. Prefer, in order:
+
+1. **Package-scoped while iterating:** `go test ./internal/api` (add `-run TestName` for one test)
+2. **Full run:** `make test-quiet` — failures-only output
+3. **`make test` (verbose)** only when diagnosing a specific failure or when coverage numbers are needed
+
 ### PPSC-895 ingest flow — gotchas worth remembering
 
 - **Real S3 requires `Content-Length` on POST.** `internal/api/client.go::buildMultipartEnvelope` precomputes the total length so the HTTP client can set it; do not add a streaming-body variant without preserving this. Real S3 returns 411 otherwise. The `testutil.AssertValidS3Upload` helper asserts the contract on every fake-S3 handler.
@@ -126,4 +134,9 @@ If `make lint` reports issues from `../*/` paths (sibling git worktrees), the go
 
 - Error wrapping: always use `fmt.Errorf("context: %w", err)`
 - Commit messages: conventional commits (`feat`, `fix`, `docs`, `test`, `refactor`, `chore`)
-- All output (spinners, styled text) writes to stderr; only scan results go to stdout
+- All output (spinners, styled text) writes to stderr; only scan results go to stdout. Enforced by the `forbidigo` linter — `fmt.Print*` is banned; the rare intentional stdout write (piping output like `auth`'s raw token) carries a `//nolint:forbidigo` with a reason.
+
+## Reading guide (avoid loading what you don't need)
+
+- `README.md` (38KB) is user-facing install/usage documentation — prefer this file and `docs/` for engineering specifics; don't read the README wholesale.
+- `internal/output/human.go` is ~2,400 lines. Read it in slices rather than whole: text-wrapping helpers (top, ~1–290), `Format`/`FormatWithOptions` entry points (~293), summary dashboard (~742), finding rendering and grouping (~886–1100), git blame (~1115), fix/diff rendering (~1300–2290), validation section (end). Grep `^func ` for the current map.

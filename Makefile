@@ -1,4 +1,4 @@
-.PHONY: build install clean test lint lint-clean scan help tools coverage release
+.PHONY: build install clean test test-quiet lint lint-clean scan help tools coverage release
 
 BINARY_NAME=armis-cli
 BUILD_DIR=bin
@@ -13,7 +13,8 @@ help:
 	@echo "  build      - Build the binary"
 	@echo "  install    - Install the binary to $(INSTALL_DIR)"
 	@echo "  clean      - Remove build artifacts"
-	@echo "  test       - Run tests with coverage"
+	@echo "  test       - Run tests with coverage (verbose)"
+	@echo "  test-quiet - Run tests with failures-only output (preferred for agents/CI iteration)"
 	@echo "  coverage   - Show coverage report"
 	@echo "  lint       - Run linters"
 	@echo "  lint-clean - Clear the golangci-lint cache, then run linters"
@@ -51,6 +52,16 @@ test:
 	@echo ""
 	@echo "Coverage summary:"
 	@$(GO) tool cover -func=$(COVERAGE_FILE) | grep total | awk '{print "  Total: " $$3}'
+
+# Failures-only test run: prints a dot per test and full output only for
+# failures. ~1000 tests × testdox is thousands of lines per run — in agent
+# sessions that output is re-read on every subsequent turn, so keep it quiet.
+test-quiet:
+	@if [ -x "$(GOTESTSUM)" ]; then \
+		$(GOTESTSUM) --format dots-v2 --hide-summary=skipped -- ./...; \
+	else \
+		$(GO) test ./...; \
+	fi
 
 coverage:
 	@if [ ! -f $(COVERAGE_FILE) ]; then \
