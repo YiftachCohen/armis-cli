@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ArmisSecurity/armis-cli/internal/output"
 )
 
 func TestIsCI(t *testing.T) {
@@ -306,6 +308,134 @@ func TestFormatDuration(t *testing.T) {
 				t.Errorf("formatDuration(%v) = %q, want %q", tt.duration, result, tt.expected)
 			}
 		})
+	}
+}
+
+func TestWaveFrame(t *testing.T) {
+	styles := output.NoColorStyles()
+
+	glyphSet := make(map[rune]bool)
+	for _, g := range waveGlyphs {
+		glyphSet[g] = true
+	}
+
+	seen := make(map[string]bool)
+	for frame := 0; frame < 100; frame++ {
+		result := waveFrame(styles, frame)
+		runes := []rune(result)
+		if len(runes) != waveWidth {
+			t.Fatalf("waveFrame(%d) has %d cells, want %d: %q", frame, len(runes), waveWidth, result)
+		}
+		for _, r := range runes {
+			if !glyphSet[r] {
+				t.Fatalf("waveFrame(%d) contains unexpected rune %q", frame, r)
+			}
+		}
+		seen[result] = true
+	}
+	if len(seen) < 2 {
+		t.Error("waveFrame should animate across frames, but all frames were identical")
+	}
+}
+
+func TestShimmerText(t *testing.T) {
+	styles := output.NoColorStyles()
+
+	t.Run("preserves message content with plain styles", func(t *testing.T) {
+		msg := "Scanning for security issues..."
+		for frame := 0; frame < 60; frame++ {
+			if got := shimmerText(styles, msg, frame); got != msg {
+				t.Fatalf("shimmerText frame %d = %q, want %q", frame, got, msg)
+			}
+		}
+	})
+
+	t.Run("empty message", func(t *testing.T) {
+		if got := shimmerText(styles, "", 5); got != "" {
+			t.Errorf("shimmerText on empty message = %q, want empty", got)
+		}
+	})
+
+	t.Run("unicode message preserved", func(t *testing.T) {
+		msg := "Étape en cours… 進行中"
+		for frame := 0; frame < 40; frame++ {
+			if got := shimmerText(styles, msg, frame); got != msg {
+				t.Fatalf("shimmerText frame %d = %q, want %q", frame, got, msg)
+			}
+		}
+	})
+}
+
+func TestTruncateMessage(t *testing.T) {
+	tests := []struct {
+		name     string
+		msg      string
+		maxRunes int
+		expected string
+	}{
+		{name: "unlimited", msg: "hello world", maxRunes: 0, expected: "hello world"},
+		{name: "negative is unlimited", msg: "hello", maxRunes: -1, expected: "hello"},
+		{name: "fits exactly", msg: "hello", maxRunes: 5, expected: "hello"},
+		{name: "shorter than limit", msg: "hi", maxRunes: 10, expected: "hi"},
+		{name: "truncated with ellipsis", msg: "hello world", maxRunes: 6, expected: "hello…"},
+		{name: "limit of one", msg: "hello", maxRunes: 1, expected: "…"},
+		{name: "unicode truncation", msg: "héllo wörld", maxRunes: 4, expected: "hél…"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := truncateMessage(tt.msg, tt.maxRunes); got != tt.expected {
+				t.Errorf("truncateMessage(%q, %d) = %q, want %q", tt.msg, tt.maxRunes, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestMaxMessageRunesNonTerminal(t *testing.T) {
+	var buf bytes.Buffer
+	if got := maxMessageRunes(&buf, 7); got != 0 {
+		t.Errorf("maxMessageRunes on bytes.Buffer = %d, want 0 (no limit)", got)
+	}
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("Failed to create pipe: %v", err)
+	}
+	defer func() { _ = r.Close() }()
+	defer func() { _ = w.Close() }()
+	if got := maxMessageRunes(w, 7); got != 0 {
+		t.Errorf("maxMessageRunes on pipe = %d, want 0 (no limit)", got)
+	}
+}
+
+func TestSpinnerOutputContainsMessage(t *testing.T) {
+	// Ensure we're not in CI mode
+	ciEnvVars := []string{"CI", "GITHUB_ACTIONS", "GITLAB_CI", "CIRCLECI", "JENKINS_URL"}
+	originalEnv := make(map[string]string)
+	for _, key := range ciEnvVars {
+		if val, exists := os.LookupEnv(key); exists {
+			originalEnv[key] = val
+		}
+		_ = os.Unsetenv(key)
+	}
+	t.Cleanup(func() {
+		for _, key := range ciEnvVars {
+			_ = os.Unsetenv(key)
+		}
+		for key, val := range originalEnv {
+			_ = os.Setenv(key, val)
+		}
+	})
+
+	var buf bytes.Buffer
+	spinner := NewSpinner("scanning things", false)
+	spinner.SetWriter(&buf)
+	spinner.Start()
+	time.Sleep(250 * time.Millisecond)
+	spinner.Stop()
+
+	if !bytes.Contains(buf.Bytes(), []byte("scanning things")) {
+		t.Errorf("spinner output should contain the message; got %q", buf.String())
 	}
 }
 
