@@ -17,6 +17,7 @@ const (
 // Status icons
 const (
 	IconSuccess = "✓"
+	IconFailure = "✗"
 	IconPointer = "►"
 	IconGutter  = "│" // Left bar for code/config blocks (see Styles.RenderCodeBlock)
 )

@@ -197,8 +197,8 @@ func (s *Scanner) ScanTarball(ctx context.Context, tarballPath string) (*model.S
 		styles.MutedText.Render("Scan completed in"),
 		styles.Duration.Render(scan.FormatElapsed(elapsed)))
 
-	fetchSpinner := progress.NewSpinnerWithContext(ctx, "Retrieving results", s.noProgress)
-	fetchSpinner.Start()
+	fetchPhase := progress.StartPhase(ctx, "Retrieving results", progress.WithPhaseDisabled(s.noProgress))
+	defer fetchPhase.Stop()
 
 	var findings []model.NormalizedFinding
 	const maxFetchRetries = 5
@@ -211,16 +211,22 @@ func (s *Scanner) ScanTarball(ctx context.Context, tarballPath string) (*model.S
 			break
 		}
 		if attempt < maxFetchRetries {
-			fetchSpinner.Update(fmt.Sprintf("Retrieving results (retry %d/%d)", attempt, maxFetchRetries-1))
+			fetchPhase.SetMessage(fmt.Sprintf("Retrieving results (retry %d/%d)", attempt, maxFetchRetries-1))
 			time.Sleep(s.fetchRetryInterval)
 		}
 	}
-	fetchSpinner.Stop()
 	if err != nil {
+		// Hand stderr back before warning: the live region owns it until stopped.
+		fetchPhase.Stop()
 		cli.PrintWarningf("Failed to retrieve results: %v", err)
 		cli.PrintWarningf("Scan completed successfully. Results are available with scan ID: %s", scanID)
 		return nil, &output.ErrResultsIncomplete{ScanID: scanID}
 	}
+
+	// No count in the receipt: len(findings) here is the raw normalized set,
+	// before non-exploitable filtering and suppression, so it would not match
+	// the total the summary goes on to print.
+	fetchPhase.Succeed("Results retrieved", "")
 
 	// Handle SBOM/VEX downloads if requested
 	if s.sbomVEXOpts != nil && (s.sbomVEXOpts.GenerateSBOM || s.sbomVEXOpts.GenerateVEX) {
