@@ -16,17 +16,17 @@ import (
 func FormatScanStatus(scanStatus, inProgressMsg string) string {
 	switch strings.ToUpper(scanStatus) {
 	case "INITIATED":
-		return "Scan initiated, preparing analysis..."
+		return "Scan initiated, preparing analysis"
 	case "IN_PROGRESS":
 		return inProgressMsg
 	case "COMPLETED":
-		return "Scan completed, preparing results..."
+		return "Scan completed, preparing results"
 	case "FAILED":
 		return "Scan encountered an error"
 	case "STOPPED":
 		return "Scan was stopped"
 	default:
-		return fmt.Sprintf("Scanning... [%s]", strings.ToUpper(scanStatus))
+		return fmt.Sprintf("Scanning [%s]", strings.ToUpper(scanStatus))
 	}
 }
 

@@ -71,7 +71,7 @@ func runInteractiveInstall(force bool) error {
 	needsSharedPlugin := len(selectedEditors) > 0 || installCodex
 
 	if needsSharedPlugin {
-		spinner := progress.NewSpinner("Downloading MCP server...", !cli.ColorsEnabled())
+		spinner := progress.NewSpinner("Downloading MCP server", !cli.ColorsEnabled())
 		spinner.Start()
 		fetchErr := ei.FetchPlugin(force)
 		spinner.Stop()
@@ -175,7 +175,7 @@ func runInteractiveInstall(force bool) error {
 
 	// Download plugin if hooks need it and it wasn't already fetched
 	if !needsSharedPlugin && (len(selectedHookClients) > 0 || installPreCommit) {
-		spinner := progress.NewSpinner("Downloading MCP server...", !cli.ColorsEnabled())
+		spinner := progress.NewSpinner("Downloading MCP server", !cli.ColorsEnabled())
 		spinner.Start()
 		fetchErr := ei.FetchPlugin(force)
 		spinner.Stop()

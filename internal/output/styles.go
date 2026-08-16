@@ -19,6 +19,7 @@ const (
 	colorOrange600 = "#EA580C"
 	colorBlue600   = "#2563EB"
 	colorGray500   = "#6B7280"
+	colorViolet500 = "#8B5CF6"
 )
 
 // Color palette - using Tailwind CSS color system for consistency
@@ -44,16 +45,22 @@ var (
 	colorMuted   = lipgloss.AdaptiveColor{Light: "#4B5563", Dark: colorGray500} // gray-600 / gray-500
 	colorAccent  = lipgloss.AdaptiveColor{Light: "#7c3aed", Dark: "#7c3aed"}    // purple-600 (Armis brand)
 
-	// Spinner wave gradient - brand violet, brightest first. On dark backgrounds
-	// bright means lighter shades; on light backgrounds bright means deeper ones.
-	colorWave1 = lipgloss.AdaptiveColor{Light: "#6D28D9", Dark: "#C4B5FD"} // violet-700 / violet-300
-	colorWave2 = lipgloss.AdaptiveColor{Light: "#7C3AED", Dark: "#A78BFA"} // violet-600 / violet-400
-	colorWave3 = lipgloss.AdaptiveColor{Light: "#8B5CF6", Dark: "#8B5CF6"} // violet-500
-	colorWave4 = lipgloss.AdaptiveColor{Light: "#A78BFA", Dark: "#6D28D9"} // violet-400 / violet-700
+	// Live spinner line. Dark variants are the A1 prototype's own values: a
+	// violet-400 head, near-white (not pure white) message, violet-tinted
+	// muted timer.
+	colorSpinnerHead   = lipgloss.AdaptiveColor{Light: "#7C3AED", Dark: "#A78BFA"} // violet-600 / violet-400
+	colorSpinnerHeadHi = lipgloss.AdaptiveColor{Light: "#6D28D9", Dark: "#C4B5FD"} // violet-700 / violet-300
+	colorSpinnerHeadLo = lipgloss.AdaptiveColor{Light: colorViolet500, Dark: colorViolet500}
+	colorSpinnerMsg    = lipgloss.AdaptiveColor{Light: "#211D2E", Dark: "#DDD9E8"}
+	colorSpinnerTimer  = lipgloss.AdaptiveColor{Light: "#6E6884", Dark: "#7A7490"}
 
-	// Spinner shimmer highlight that sweeps across the message text
-	colorShimmerCore = lipgloss.AdaptiveColor{Light: "#7C3AED", Dark: "#C4B5FD"} // violet-600 / violet-300
-	colorShimmerEdge = lipgloss.AdaptiveColor{Light: "#8B5CF6", Dark: "#8B5CF6"} // violet-500
+	// Breathing-ellipsis dots - brand violet, brightest for the dot that just lit.
+	// Dark variants are the prototype's own values (ramp[0], ramp[2], dim);
+	// an unlit dot is nearly the background, which is what makes the ellipsis
+	// read as breathing rather than pulsing.
+	colorDotLit   = lipgloss.AdaptiveColor{Light: "#6D28D9", Dark: "#C4B5FD"} // violet-700 / violet-300
+	colorDotAged  = lipgloss.AdaptiveColor{Light: "#8B5CF6", Dark: "#8B5CF6"} // violet-500
+	colorDotUnlit = lipgloss.AdaptiveColor{Light: "#D5D0E3", Dark: "#3A3450"} // near-background either way
 
 	// Diff colors - darker on light bg for contrast
 	colorDiffAdd    = lipgloss.AdaptiveColor{Light: "#16A34A", Dark: "#22C55E"}       // green-600 / green-500
@@ -139,12 +146,13 @@ type Styles struct {
 	LocationFg lipgloss.Style
 
 	// Spinner styles
-	SpinnerChar        lipgloss.Style   // The animated spinner character (fallback)
-	SpinnerText        lipgloss.Style   // The message text
-	SpinnerTimer       lipgloss.Style   // The elapsed time [00:00]
-	SpinnerWave        []lipgloss.Style // Gradient shades for the wave loader, brightest first
-	SpinnerShimmerCore lipgloss.Style   // Center of the shimmer highlight sweeping the message
-	SpinnerShimmerEdge lipgloss.Style   // Edges of the shimmer highlight
+	SpinnerHead     []lipgloss.Style // Head shades, brightest first; the glyph shimmers through them
+	SpinnerChar     lipgloss.Style   // Fallback head style when SpinnerHead is empty
+	SpinnerText     lipgloss.Style   // The message text (bold, bright - the live line's focus)
+	SpinnerTimer    lipgloss.Style   // The elapsed time [00:00]
+	SpinnerDotLit   lipgloss.Style   // Newest dot of the breathing ellipsis
+	SpinnerDotAged  lipgloss.Style   // Dots lit on an earlier step
+	SpinnerDotUnlit lipgloss.Style   // Dots not lit yet (holds the width)
 
 	// Info styles
 	ScanID          lipgloss.Style // For highlighting scan IDs
@@ -278,17 +286,17 @@ func DefaultStyles() *Styles {
 		LocationFg: lipgloss.NewStyle().Bold(true).Foreground(colorBright),
 
 		// Spinner styles
-		SpinnerChar:  lipgloss.NewStyle().Bold(true).Foreground(colorAccent),
-		SpinnerText:  lipgloss.NewStyle(),
-		SpinnerTimer: lipgloss.NewStyle().Foreground(colorMuted),
-		SpinnerWave: []lipgloss.Style{
-			lipgloss.NewStyle().Bold(true).Foreground(colorWave1),
-			lipgloss.NewStyle().Foreground(colorWave2),
-			lipgloss.NewStyle().Foreground(colorWave3),
-			lipgloss.NewStyle().Foreground(colorWave4),
+		SpinnerHead: []lipgloss.Style{
+			lipgloss.NewStyle().Bold(true).Foreground(colorSpinnerHeadHi),
+			lipgloss.NewStyle().Bold(true).Foreground(colorSpinnerHead),
+			lipgloss.NewStyle().Foreground(colorSpinnerHeadLo),
 		},
-		SpinnerShimmerCore: lipgloss.NewStyle().Bold(true).Foreground(colorShimmerCore),
-		SpinnerShimmerEdge: lipgloss.NewStyle().Foreground(colorShimmerEdge),
+		SpinnerChar:     lipgloss.NewStyle().Bold(true).Foreground(colorSpinnerHead),
+		SpinnerText:     lipgloss.NewStyle().Bold(true).Foreground(colorSpinnerMsg),
+		SpinnerTimer:    lipgloss.NewStyle().Foreground(colorSpinnerTimer),
+		SpinnerDotLit:   lipgloss.NewStyle().Bold(true).Foreground(colorDotLit),
+		SpinnerDotAged:  lipgloss.NewStyle().Foreground(colorDotAged),
+		SpinnerDotUnlit: lipgloss.NewStyle().Foreground(colorDotUnlit),
 
 		// Info styles
 		ScanID:         lipgloss.NewStyle().Bold(true).Foreground(colorAccent),
@@ -360,12 +368,13 @@ func NoColorStyles() *Styles {
 		Underline:  plain,
 		LocationFg: plain,
 
-		SpinnerChar:        plain,
-		SpinnerText:        plain,
-		SpinnerTimer:       plain,
-		SpinnerWave:        []lipgloss.Style{plain, plain, plain, plain},
-		SpinnerShimmerCore: plain,
-		SpinnerShimmerEdge: plain,
+		SpinnerHead:     []lipgloss.Style{plain, plain, plain},
+		SpinnerChar:     plain,
+		SpinnerText:     plain,
+		SpinnerTimer:    plain,
+		SpinnerDotLit:   plain,
+		SpinnerDotAged:  plain,
+		SpinnerDotUnlit: plain,
 
 		ScanID:          plain,
 		StatusComplete:  plain,
