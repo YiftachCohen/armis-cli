@@ -3,8 +3,14 @@
 Status: **design approved via interactive prototypes, pending final toggle selection**
 Branch: `claude/cli-loader-animation-8ohucn`
 Prototypes (living spec — the visual source of truth):
-- Set player + per-piece isolation: https://claude.ai/code/artifact/f614c285-b6e4-49be-8a03-eedc2f869f4b
-- Full effect catalog (all 45 explored variants): https://claude.ai/code/artifact/0e0dce38-bfa4-4b7a-9f30-97e314d14fbc
+- **`docs/design/scan-experience-prototype.html`** — in-repo, self-contained; open in
+  any browser. Plays the full two-act experience as three preset "sets" with per-effect
+  toggles, plus every piece animating in isolation. The JS renderers are labeled with
+  the same codes as §5 (A1, B5, C1, …) and are the executable definition of each
+  effect's glyphs, colors, and timing — port from them directly.
+- Hosted copies (same content, may be inaccessible to headless agents):
+  set player https://claude.ai/code/artifact/f614c285-b6e4-49be-8a03-eedc2f869f4b ·
+  full 45-variant catalog https://claude.ai/code/artifact/0e0dce38-bfa4-4b7a-9f30-97e314d14fbc
 
 This document gives an implementing agent everything needed to build the redesigned
 `armis scan` terminal experience in Go. Read it together with `CLAUDE.md`.

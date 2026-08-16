@@ -1,0 +1,591 @@
+<title>Armis CLI · Scan Experience</title>
+<style>
+  :root {
+    --bg: #F7F6FA; --surface: #FFFFFF; --text: #211D2E; --muted: #6E6884;
+    --border: #E4E0EE; --accent: #7C3AED; --accent-soft: #EDE8FB; --chip-text: #5B21B6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #171320; --surface: #1E1929; --text: #E5E1F0; --muted: #8F89A6;
+      --border: #2D2740; --accent: #A78BFA; --accent-soft: #2A2140; --chip-text: #C4B5FD;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #171320; --surface: #1E1929; --text: #E5E1F0; --muted: #8F89A6;
+    --border: #2D2740; --accent: #A78BFA; --accent-soft: #2A2140; --chip-text: #C4B5FD;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    margin: 0; padding: 36px 22px 80px; line-height: 1.55;
+  }
+  .mono, h1, .term, button, .codes { font-family: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace; }
+  .wrap { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+  header { display: flex; flex-direction: column; gap: 10px; }
+  .eyebrow { color: var(--accent); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
+    font-family: ui-monospace, Menlo, Consolas, monospace; }
+  h1 { font-size: clamp(24px, 3.5vw, 33px); margin: 0; letter-spacing: -0.01em; }
+  h1 .dim { color: var(--muted); font-weight: 400; }
+  .lede { color: var(--muted); max-width: 66ch; margin: 0; }
+
+  .sets { display: flex; gap: 10px; flex-wrap: wrap; }
+  .sets button {
+    background: var(--surface); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 18px; font-size: 13.5px; cursor: pointer; font-weight: 600;
+  }
+  .sets button:hover { border-color: var(--accent); }
+  .sets button[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--chip-text); }
+  .sets button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .setdesc { color: var(--muted); font-size: 13.5px; margin: 0; max-width: 74ch; }
+  .setdesc .codes { color: var(--chip-text); font-size: 12px; }
+  .fx { display: flex; gap: 7px; flex-wrap: wrap; }
+  .fx button {
+    background: var(--surface); color: var(--muted); border: 1px solid var(--border);
+    border-radius: 999px; padding: 4px 12px; font-size: 12px; cursor: pointer;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+  }
+  .fx button:hover { border-color: var(--accent); }
+  .fx button[aria-pressed="true"] {
+    background: var(--accent-soft); border-color: var(--accent); color: var(--chip-text); font-weight: 600;
+  }
+  .fx button b { font-weight: 700; margin-right: 4px; }
+  .controls { display: flex; gap: 10px; }
+  .controls button {
+    background: var(--surface); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 7px 14px; font-size: 13px; cursor: pointer;
+  }
+  .controls button:hover { border-color: var(--accent); }
+
+  .stagewrap { position: relative; }
+  .act { color: var(--muted); font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase;
+    margin-bottom: 8px; font-family: ui-monospace, Menlo, Consolas, monospace; min-height: 1.2em; }
+  .term { border-radius: 10px; overflow: hidden; border: 1px solid var(--border);
+    box-shadow: 0 2px 14px rgba(20, 12, 40, 0.14); }
+  .term-bar { display: flex; align-items: center; gap: 8px; padding: 9px 13px; font-size: 11.5px;
+    background: #221C31; color: #8F89A6; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .dots { display: flex; gap: 5px; }
+  .dots i { width: 9px; height: 9px; border-radius: 50%; display: block; background: #453C60; }
+  .term-body { background: #0F0C17; padding: 16px 18px; overflow-x: auto; min-height: 540px; }
+  .term-body pre { margin: 0; font-size: 13.5px; line-height: 1.75; font-family: inherit; white-space: pre; }
+
+  .toast {
+    position: absolute; top: 46px; right: 14px;
+    background: #2A2140; border: 1px solid #7C3AED; color: #E5E1F0;
+    border-radius: 8px; padding: 10px 14px; font-size: 12.5px;
+    font-family: system-ui, sans-serif; box-shadow: 0 6px 22px rgba(0,0,0,0.4);
+    opacity: 0; transform: translateY(-6px); transition: opacity 0.3s, transform 0.3s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast b { color: #C4B5FD; }
+
+  .note { color: var(--muted); font-size: 13px; max-width: 74ch; }
+
+  .pieces-sec { display: flex; flex-direction: column; gap: 14px; margin-top: 10px; }
+  .pieces-h { font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+    margin: 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 600; }
+  .pieces-h span { color: var(--accent); }
+  .pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 13px; }
+  .pcard {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 9px;
+    padding: 11px 12px 10px; display: flex; flex-direction: column; gap: 7px;
+    cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .pcard:hover { border-color: var(--accent); }
+  .pcard.on { border-color: var(--accent); box-shadow: 0 0 0 1.5px var(--accent); }
+  .pcard.core { cursor: default; opacity: 0.92; }
+  .pcard.core:hover { border-color: var(--border); }
+  .pcard-head { display: flex; align-items: baseline; gap: 8px; }
+  .pcode { font-size: 11px; font-weight: 700; color: var(--chip-text); background: var(--accent-soft);
+    border-radius: 4px; padding: 2px 7px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .pcard.on .pcode { background: var(--accent); color: #fff; }
+  .pname { font-weight: 600; font-size: 13px; }
+  .ptag { margin-left: auto; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .pstrip { background: #0F0C17; border-radius: 6px; padding: 9px 11px; overflow-x: auto; }
+  .pstrip pre { margin: 0; font-size: 12.5px; line-height: 1.7; white-space: pre;
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace; }
+  .pnote { color: var(--muted); font-size: 12px; margin: 0; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">armis-cli / proposal · your picks, composed</div>
+    <h1>Three sets <span class="dim">— same scan, rising intensity</span></h1>
+    <p class="lede">Every element here is from your mix. Each set is a complete, coherent composition —
+    switch between them while it plays. Act I finds three issues; Act II replays clean.</p>
+    <div class="sets" id="setBtns"></div>
+    <p class="setdesc" id="setDesc"></p>
+    <div class="fx" id="fxBtns"></div>
+    <div class="controls">
+      <button id="replayBtn">↺ replay</button>
+      <button id="playBtn" aria-pressed="true">⏸ pause</button>
+    </div>
+  </header>
+
+  <div class="stagewrap">
+    <div class="act" id="actLabel"></div>
+    <div class="term">
+      <div class="term-bar"><span class="dots"><i></i><i></i><i></i></span> <span id="barTitle">armis scan repo .</span></div>
+      <div class="term-body"><pre id="screen"></pre></div>
+    </div>
+    <div class="toast" id="toast">🔔 <b>Armis</b> — scan complete · 3 findings</div>
+  </div>
+
+  <p class="note" id="footNote"></p>
+
+  <section class="pieces-sec">
+    <h2 class="pieces-h"><span>the pieces, in isolation</span> — click a card to switch it on or off in the composition above</h2>
+    <div class="pgrid" id="pGrid"></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var P = {
+    ramp: ["#C4B5FD", "#A78BFA", "#8B5CF6", "#6D28D9"],
+    text: "#DDD9E8", muted: "#7A7490", dim: "#3A3450",
+    green: "#4ADE80", link: "#A78BFA", crit: "#EF4444", high: "#F97316", med: "#EAB308"
+  };
+  function sp(t, c, b, x) { return '<span style="color:' + c + (b ? ";font-weight:700" : "") + (x || "") + '">' + t + "</span>"; }
+  function esc(t) { return t.replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+  function timer(f) { var s = Math.floor(f * 0.08), m = Math.floor(s / 60);
+    return "[" + String(m).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0") + "]"; }
+  function rnd(i, f) { var x = Math.sin(i * 127.1 + f * 311.7) * 43758.5453; return x - Math.floor(x); }
+  function smoothstep(u) { u = Math.max(0, Math.min(1, u)); return u * u * (3 - 2 * u); }
+  function easeOut(u) { u = Math.max(0, Math.min(1, u)); return 1 - Math.pow(1 - u, 3); }
+  function hsl(h, s, l) {
+    s /= 100; l /= 100; var a = s * Math.min(l, 1 - l);
+    var fc = function (n) { var k = (n + h / 30) % 12;
+      var c = l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
+      return Math.round(255 * c).toString(16).padStart(2, "0"); };
+    return "#" + fc(0) + fc(8) + fc(4);
+  }
+  function driftHue(f) { return 262 + 42 * Math.sin(f * 0.045); }
+  function link(t) { return sp(esc(t), P.link, true, ";text-decoration:underline;text-underline-offset:3px"); }
+
+  // A1 — classic braille spinner
+  function spin(f) { return sp("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"[f % 10], P.ramp[1], true); }
+  // B5 — breathing ellipsis
+  function ellip(f, on) {
+    if (!on) return sp("...", P.text, true);
+    var n = (f >> 3) % 4, out = "";
+    for (var i = 0; i < 3; i++) out += i < n ? sp(".", i === n - 1 ? P.ramp[0] : P.ramp[2], i === n - 1) : sp(".", P.dim);
+    return out;
+  }
+  // D3 (+D2) — trail: appended ✓, optional sparkle pop just after landing
+  function trail(label, extra, age, sparkle) {
+    var s = sparkle && age >= 0 && age < 10 ? " " + sp("✦", hsl(driftHue(age * 7), 90, 78), true) : "";
+    return sp("✓ ", P.green) + sp(label, P.text) + sp("  (" + extra + ")", P.muted) + s;
+  }
+  function statusMem(msg) { return sp(esc(msg), P.muted); }
+
+  // armis arrow (F1/F2), line size one-shot
+  var BR = [[1, 2, 4, 64], [8, 16, 32, 128]];
+  var ARROW = (function () {
+    var path = [[0.6, 3.2], [7.3, 0.2], [11.4, 2.3]], out = [], i;
+    for (var s = 0; s < path.length - 1; s++) {
+      var x1 = path[s][0], y1 = path[s][1], x2 = path[s + 1][0], y2 = path[s + 1][1];
+      var n = Math.max(2, Math.round(Math.hypot(x2 - x1, y2 - y1) / 0.45));
+      for (var k = s ? 1 : 0; k <= n; k++) { var u = k / n; out.push([x1 + (x2 - x1) * u, y1 + (y2 - y1) * u]); }
+    }
+    for (i = out.length - 1; i >= 0; i--) if (out[i][1] < 2.5) out.push([out[i][0] + 0.5, out[i][1] + 0.85]);
+    var mn = 1e9, mx = -1e9;
+    for (i = 0; i < out.length; i++) { var u2 = out[i][0] - out[i][1] * 0.6; if (u2 < mn) mn = u2; if (u2 > mx) mx = u2; }
+    for (i = 0; i < out.length; i++) out[i][2] = (out[i][0] - out[i][1] * 0.6 - mn) / (mx - mn);
+    return out;
+  })();
+  function arrowOnce(lt) {
+    var code = new Array(6).fill(0), val = new Array(6).fill(0);
+    for (var i = 0; i < ARROW.length; i++) {
+      var d = ARROW[i];
+      var a = smoothstep((lt / 16 - d[2] * 0.55) / 0.45);
+      if (a <= 0.03) continue;
+      var sa = rnd(i, 3) * Math.PI * 2, sr = 5 * (0.8 + rnd(i, 5) * 0.6);
+      var x = d[0] * a + (6 + Math.cos(sa) * sr) * (1 - a);
+      var y = d[1] * a + (2 + Math.sin(sa) * sr * 0.5) * (1 - a);
+      var v = 0.55 * (0.3 + 0.7 * a);
+      var sw = (lt - 20) / 12;
+      if (sw > 0 && sw < 1 && Math.abs(d[2] - sw) < 0.14) v = 1;
+      var xi = Math.round(x), yi = Math.round(y);
+      if (xi < 0 || xi > 11 || yi < 0 || yi > 3) continue;
+      var ci = xi >> 1;
+      code[ci] |= BR[xi & 1][yi & 3];
+      if (v > val[ci]) val[ci] = v;
+    }
+    var out = "";
+    for (var c = 0; c < 6; c++) {
+      if (!code[c]) { out += " "; continue; }
+      out += sp(String.fromCharCode(0x2800 + code[c]), val[c] > 0.85 ? P.ramp[0] : val[c] > 0.5 ? P.ramp[1] : P.ramp[2], val[c] > 0.85);
+    }
+    return out;
+  }
+
+  // ---- set presets (only pieces from the user's mix; sparkle off by default) ----
+  var SETS = {
+    1: { name: "set 1 · the log",
+      codes: "A1 · C1 · D3 · E2+E3 · F2 · F3 · G1 · G2",
+      desc: "Calm and CI-honest. Spinner + real statuses, counters where data is local, pure append trails, findings land gently, and the arrow appears only on the all-clear.",
+      foot: "G2 runs live above: the terminal tab title ticks while the scan runs. G3 (taskbar) can't be simulated here.",
+      preset: { spinner: true, ellipsis: false, verbs: false, stream: false, telemetry: false, feed: false, sparkle: false, arrowAlways: false, toast: false, findStagger: 14 } },
+    2: { name: "set 2 · the stream",
+      codes: "A1 · B5 · B9 · C1 · C2 · C3 · D3 · E2+E3 · F2 · F3 · G1 · G2 · G3",
+      desc: "Adds words and data: rotating narrative verbs with breathing ellipsis, the file stream while packaging, and telemetry during analysis.",
+      foot: "B9 verbs and C2 analysis counters need backend phases/events to be fully honest — flagged, not forgotten. G3 (taskbar progress) is real but invisible to this sim.",
+      preset: { spinner: true, ellipsis: true, verbs: true, stream: true, telemetry: true, feed: false, sparkle: false, arrowAlways: false, toast: false, findStagger: 20 } },
+    3: { name: "set 3 · the show",
+      codes: "everything picked — + C4 · F1 · G5",
+      desc: "The full mix: tall activity feed during analysis, the arrow assembling at every completion, and a desktop notification when the scan finishes.",
+      foot: "C4's analysis feed is the piece that most needs the backend scan-events endpoint; everything else in this set is implementable today.",
+      preset: { spinner: true, ellipsis: true, verbs: true, stream: true, telemetry: false, feed: true, sparkle: false, arrowAlways: true, toast: true, findStagger: 20 } }
+  };
+  var curSet = 2;
+  var state = Object.assign({}, SETS[curSet].preset);
+
+  // toggleable effects: [code, label, state key]
+  var TOGGLES = [
+    ["A1", "spinner", "spinner"], ["B5", "ellipsis", "ellipsis"], ["B9", "verbs", "verbs"],
+    ["C3", "pkg stream", "stream"], ["C2", "telemetry", "telemetry"], ["C4", "feed", "feed"],
+    ["D2", "sparkle", "sparkle"], ["F1", "arrow always", "arrowAlways"], ["G5", "notification", "toast"]
+  ];
+
+  // ---- timelines ----
+  var TD = { prep: 22, prepDone: 66, up: 68, upDone: 108, id: 112, an: 118, anDone: 238,
+             fetch: 240, fetchDone: 254, sig: 262, find: 292, sum: 372, end: 442 };
+  var TC = { prep: 8, prepDone: 38, up: 40, upDone: 66, id: 70, an: 76, anDone: 156,
+             fetch: 158, fetchDone: 170, sig: 184, link: 222, end: 300 };
+  var CYCLE = TD.end + TC.end;
+
+  var VERBS = ["Analyzing dependencies", "Scanning for secrets", "Tracing data flows", "Weighing exploitability"];
+  var PKG_FILES = ["internal/api/client.go", "package-lock.json", "Dockerfile", ".github/workflows/ci.yml", "internal/auth/jwt.go", "go.sum"];
+  var FEED = [["ok", "config/dev.yaml — clean"], ["hit", ".env.backup — 1 candidate"], ["ok", "internal/auth/jwt.go — clean"],
+    ["info", "test/fixtures — skipped"], ["ok", "scripts/deploy.sh — entropy ok"], ["hit", "lodash@4.17.20 — 3 advisories"]];
+  var FINDINGS = [
+    ["CRITICAL", P.crit, "Exposed AWS access key", ".env.backup:3 — secret verified live against AWS STS"],
+    ["HIGH", P.high, "Prototype pollution — lodash 4.17.20", "package-lock.json — CVE-2025-31842 · reachable"],
+    ["MEDIUM", P.med, "GPL-3.0 license in vendored dependency", "vendor/parser — conflicts with distribution policy"]
+  ];
+
+  function liveLine(text, lt, f, cfg, detail) {
+    return (cfg.spinner ? spin(f) + " " : "  ") + sp(esc(text), P.text, true) +
+      (detail ? sp(" — ", P.dim) + sp(esc(detail), P.text) : "") +
+      ellip(f, cfg.ellipsis) + " " + sp(timer(lt), P.muted);
+  }
+
+  function act(lf, f, cfg, dirty) {
+    var T = dirty ? TD : TC, L = [], i;
+    var cmd = "armis scan repo .";
+    if (dirty) {
+      var typed = Math.min(cmd.length, Math.floor(lf * 1.1));
+      var curs = lf < T.prep - 2 ? ((f >> 2) % 2 ? sp("▍", P.ramp[0], true) : sp("▍", P.dim)) : "";
+      L.push(sp("$ ", P.muted) + sp(esc(cmd.slice(0, typed)), P.text) + curs);
+    } else {
+      L.push(sp("$ ", P.muted) + sp(esc(cmd), P.text));
+    }
+    L.push("");
+
+    // packaging — C1 counter (+C3 stream below the status line)
+    if (lf >= T.prep) {
+      if (lf < T.prepDone) {
+        var pu = easeOut((lf - T.prep) / (T.prepDone - T.prep));
+        L.push(liveLine("Packaging repository", lf - T.prep, f, cfg,
+          Math.floor(1204 * pu).toLocaleString("en-US") + " files · " + (42.3 * pu).toFixed(1) + " MB"));
+        if (cfg.stream) {
+          var s = Math.floor((lf - T.prep) / 6), N = PKG_FILES.length;
+          if (lf - T.prep > 10) L.push(sp("  ✓ " + PKG_FILES[((s - 1) % N + N) % N], P.dim));
+          L.push(sp("  ✓ ", P.green) + sp(PKG_FILES[(s % N + N) % N], P.muted));
+        }
+      } else {
+        L.push(statusMem("Packaging repository..."));
+        L.push(trail("Repository packaged", "2.4s · 42.3 MB · 1,204 files", lf - T.prepDone, cfg.sparkle));
+      }
+    }
+    // upload — C1 counter
+    if (lf >= T.up) {
+      if (lf < T.upDone) {
+        var uu = easeOut((lf - T.up) / (T.upDone - T.up));
+        L.push(liveLine("Uploading to Armis Cloud", lf - T.up, f, cfg, (42.3 * uu).toFixed(1) + " / 42.3 MB"));
+      } else {
+        L.push(statusMem("Uploading to Armis Cloud..."));
+        L.push(trail("Uploaded to Armis Cloud", "4.0s", lf - T.upDone, cfg.sparkle));
+      }
+    }
+    // G1 — scan id link
+    if (lf >= T.id) {
+      L.push(sp("Scan ID: ", P.muted) + link(dirty ? "scn_9f2ce81b04" : "scn_a81d20c3f7") +
+        (lf < T.id + 24 ? sp("  ⌁ clickable — OSC 8", P.dim) : ""));
+    }
+    // analysis
+    if (lf >= T.an) {
+      var alt = Math.min(lf, T.anDone) - T.an;
+      if (alt >= 16) L.push(statusMem("Scan initiated, preparing analysis..."));
+      if (lf < T.anDone) {
+        var txt;
+        if (alt < 16) txt = "Scan initiated, preparing analysis";
+        else if (cfg.verbs) txt = VERBS[Math.floor((alt - 16) / 30) % VERBS.length];
+        else txt = "Scanning for security issues";
+        L.push(liveLine(txt, alt, f, cfg));
+        if (cfg.telemetry && !cfg.feed) { // C2
+          var sep = sp("  ·  ", P.dim);
+          L.push("  " + sp("1,204", P.ramp[1], true) + sp(" files", P.muted) + sep +
+            sp(String(38 + Math.floor(alt / 22)), (alt % 22) < 3 ? P.ramp[0] : P.text, (alt % 22) < 3) + sp(" pkgs", P.muted) + sep +
+            sp(String(dirty ? Math.min(3, Math.floor(alt / 45)) : 0), P.text) + sp(" findings", P.muted));
+        }
+        if (cfg.feed) { // C4
+          var step = Math.floor(alt / 5);
+          for (var k = 3; k >= 0; k--) {
+            var idx = step - k; if (idx < 0) continue;
+            var it = dirty ? FEED[idx % FEED.length] : ["ok", FEED[(idx % FEED.length + FEED.length) % FEED.length][1].split(" — ")[0] + " — clean"];
+            var head = it[0] === "ok" ? sp("✓ ", k === 0 ? P.green : P.dim)
+              : it[0] === "hit" ? sp("● ", k === 0 ? P.med : "#8a6a1f") : sp("· ", P.dim);
+            L.push("  " + head + sp(esc(it[1]), k === 0 ? P.text : k === 1 ? P.muted : P.dim));
+          }
+        }
+      } else {
+        L.push(statusMem("Scanning for security issues..."));
+        L.push(trail("Analysis complete", "11.2s · " + (dirty ? "3 findings" : "0 findings"), lf - T.anDone, cfg.sparkle));
+      }
+    }
+    // fetch
+    if (lf >= T.fetch) {
+      if (lf < T.fetchDone) L.push(liveLine("Retrieving results", lf - T.fetch, f, cfg));
+      else {
+        L.push(statusMem("Retrieving results..."));
+        L.push(trail("Results retrieved", "1.8s", lf - T.fetchDone, cfg.sparkle));
+      }
+    }
+
+    if (dirty) {
+      // F1 (set 3) — arrow at completion even with findings
+      if (cfg.arrowAlways && lf >= T.sig) {
+        L.push("");
+        L.push(arrowOnce(lf - T.sig) + " " + sp("Scan complete", P.text, lf - T.sig > 14) + sp("  18.4s total", P.muted));
+      }
+      // E2+E3 — held beat, then dot-prefix findings land staggered
+      if (lf >= T.find) {
+        L.push("");
+        for (i = 0; i < FINDINGS.length; i++) {
+          var flt = lf - T.find - i * cfg.findStagger;
+          if (flt < 0) continue;
+          var fd = FINDINGS[i];
+          L.push(sp("● ", fd[1]) + sp(fd[0].padEnd(9), fd[1], true) + sp(esc(fd[2]), P.text, flt < 8));
+          if (flt >= 4) L.push(sp("            " + esc(fd[3]), P.muted));
+        }
+      }
+      // F3 — severity count-up + G1 report link
+      if (lf >= T.sum) {
+        var cu = easeOut((lf - T.sum) / 26);
+        L.push("");
+        L.push(sp("● ", P.crit) + sp(Math.ceil(1 * cu) + " critical", P.crit, true) + "   " +
+          sp("● ", P.high) + sp(Math.ceil(1 * cu) + " high", P.high) + "   " +
+          sp("● ", P.med) + sp(Math.ceil(1 * cu) + " medium", P.med));
+        if (lf >= T.sum + 8) L.push(sp("Full details: ", P.muted) + link("cloud.armis.com/scans/scn_9f2ce81b04"));
+      }
+    } else {
+      // F2 — the all-clear earns the arrow (all sets)
+      if (lf >= T.sig) {
+        L.push("");
+        L.push(arrowOnce(lf - T.sig) + " " + sp("No findings — all clear", P.green, lf - T.sig > 14) +
+          sp("  1,204 files · 148 packages", P.muted));
+      }
+      if (lf >= T.link) {
+        L.push("");
+        L.push(sp("Report archived: ", P.dim) + link("cloud.armis.com/scans/scn_a81d20c3f7"));
+      }
+    }
+    return L.join("\n");
+  }
+
+  // ---- run loop, set switching, G2 tab title, G5 toast ----
+  var screen = document.getElementById("screen"), actLabel = document.getElementById("actLabel");
+  var barTitle = document.getElementById("barTitle"), toast = document.getElementById("toast");
+  var frame = 0, playing = true, tid = null;
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduced) { playing = false; frame = TD.sum + 16; }
+
+  function draw() {
+    var lf = frame % CYCLE, dirty = lf < TD.end;
+    var alf = dirty ? lf : lf - TD.end, T = dirty ? TD : TC;
+    screen.innerHTML = act(alf, frame, state, dirty);
+    actLabel.textContent = dirty ? "act i — a scan that finds something" : "act ii — a clean scan";
+    // G2 — tab title ticks while scanning
+    var scanning = alf >= T.prep && alf < T.fetchDone;
+    barTitle.textContent = scanning ? "armis · " + timer(alf).slice(1, 6) : "armis scan repo .";
+    // G5 — notification toast (act I completion)
+    toast.classList.toggle("show", state.toast && dirty && alf >= TD.find && alf < TD.find + 60);
+  }
+  function setPlaying(on) {
+    playing = on;
+    var b = document.getElementById("playBtn");
+    b.textContent = on ? "⏸ pause" : "▶ play";
+    b.setAttribute("aria-pressed", String(on));
+    if (tid) { clearInterval(tid); tid = null; }
+    if (on) tid = setInterval(function () { frame++; draw(); }, 80);
+  }
+
+  var setBtns = document.getElementById("setBtns"), setDesc = document.getElementById("setDesc");
+  var footNote = document.getElementById("footNote"), fxBtns = document.getElementById("fxBtns");
+  [1, 2, 3].forEach(function (n) {
+    var b = document.createElement("button");
+    b.textContent = SETS[n].name;
+    b.setAttribute("aria-pressed", String(n === curSet));
+    b.addEventListener("click", function () {
+      curSet = n; frame = 0;
+      state = Object.assign({}, SETS[n].preset);
+      setBtns.querySelectorAll("button").forEach(function (x, xi) {
+        x.setAttribute("aria-pressed", String(xi + 1 === n));
+      });
+      syncDesc(); syncFx(); draw();
+    });
+    setBtns.appendChild(b);
+  });
+  // per-effect toggle chips: sets are presets, chips are the live truth
+  TOGGLES.forEach(function (t) {
+    var b = document.createElement("button");
+    b.innerHTML = "<b>" + t[0] + "</b>" + t[1];
+    b.dataset.key = t[2];
+    b.addEventListener("click", function () {
+      var key = t[2], on = !state[key];
+      state[key] = on;
+      if (key === "telemetry" && on) state.feed = false;   // C2/C4 are exclusive
+      if (key === "feed" && on) state.telemetry = false;
+      syncFx(); draw();
+    });
+    fxBtns.appendChild(b);
+  });
+  function syncFx() {
+    fxBtns.querySelectorAll("button").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(!!state[b.dataset.key]));
+    });
+  }
+  function syncDesc() {
+    setDesc.innerHTML = SETS[curSet].desc + ' <span class="codes">[' + SETS[curSet].codes + "]</span>";
+    footNote.textContent = SETS[curSet].foot;
+  }
+  document.getElementById("playBtn").addEventListener("click", function () { setPlaying(!playing); });
+  document.getElementById("replayBtn").addEventListener("click", function () { frame = 0; draw(); if (!playing) setPlaying(true); });
+
+  // ---- the pieces, in isolation ----
+  var MSG = "Scanning for security issues";
+  var PIECES = [
+    { c: "A1", k: "spinner", n: "spinner", note: "Classic braille head on the live line.",
+      f: function (f) { return spin(f) + " " + sp(MSG + "...", P.text, true) + " " + sp(timer(f), P.muted); } },
+    { c: "B5", k: "ellipsis", n: "breathing ellipsis", note: "The trailing dots fill bright and drain dim.",
+      f: function (f) { return sp(MSG, P.text, true) + ellip(f, true) + " " + sp(timer(f), P.muted); } },
+    { c: "B9", k: "verbs", n: "narrative verbs", note: "The status rotates through scan phases. Needs real backend phases to be honest.",
+      f: function (f) { return sp(VERBS[Math.floor(f / 30) % VERBS.length], P.text, true) + ellip(f, true) + " " + sp(timer(f), P.muted); } },
+    { c: "C1", k: null, n: "live counter", note: "Core — numbers tick with real data from the tar walk and uploader.",
+      f: function (f) {
+        var u = easeOut((f % 90) / 80);
+        return sp("Packaging repository", P.text, true) + sp(" — ", P.dim) +
+          sp(Math.floor(1204 * u).toLocaleString("en-US") + " files · " + (42.3 * u).toFixed(1) + " MB", P.text) + " " + sp(timer(f % 90), P.muted);
+      } },
+    { c: "C3", k: "stream", n: "packaging stream", note: "Real files flow beneath the status line while the repo is packaged.",
+      f: function (f) {
+        var s = Math.floor(f / 6), N = PKG_FILES.length;
+        return sp("Packaging repository", P.text, true) + ellip(f, true) + "\n" +
+          sp("  ✓ " + PKG_FILES[((s - 1) % N + N) % N], P.dim) + "\n" +
+          sp("  ✓ ", P.green) + sp(PKG_FILES[(s % N + N) % N], P.muted);
+      } },
+    { c: "C2", k: "telemetry", n: "telemetry", note: "Counters below the analysis line; changed values flash. Needs backend events.",
+      f: function (f) {
+        var sep = sp("  ·  ", P.dim), alt = f % 300;
+        return sp(MSG + "...", P.text, true) + " " + sp(timer(alt), P.muted) + "\n" +
+          "  " + sp("1,204", P.ramp[1], true) + sp(" files", P.muted) + sep +
+          sp(String(38 + Math.floor(alt / 22)), (alt % 22) < 3 ? P.ramp[0] : P.text, (alt % 22) < 3) + sp(" pkgs", P.muted) + sep +
+          sp(String(Math.min(3, Math.floor(alt / 45))), P.text) + sp(" findings", P.muted);
+      } },
+    { c: "C4", k: "feed", n: "activity feed", note: "Item stream under the analysis line, newest bright at bottom. Needs backend events.",
+      f: function (f) {
+        var out = [sp(MSG + "...", P.text, true) + " " + sp(timer(f), P.muted)];
+        var step = Math.floor(f / 5);
+        for (var k = 2; k >= 0; k--) {
+          var idx = step - k; if (idx < 0) continue;
+          var it = FEED[idx % FEED.length];
+          var head = it[0] === "ok" ? sp("✓ ", k === 0 ? P.green : P.dim)
+            : it[0] === "hit" ? sp("● ", k === 0 ? P.med : "#8a6a1f") : sp("· ", P.dim);
+          out.push("  " + head + sp(esc(it[1]), k === 0 ? P.text : k === 1 ? P.muted : P.dim));
+        }
+        return out.join("\n");
+      } },
+    { c: "D3", k: null, n: "append trail", note: "Core — the status line stays like a CI log; the ✓ receipt appends below it.",
+      f: function (f) {
+        var t = f % 110;
+        return t < 55 ? sp("Uploading to Armis Cloud...", P.text, true) + " " + sp(timer(t), P.muted)
+          : statusMem("Uploading to Armis Cloud...") + "\n" + trail("Uploaded to Armis Cloud", "4.0s", -1, false);
+      } },
+    { c: "D2", k: "sparkle", n: "trail sparkle", note: "A single ✦ pops as the receipt lands, then vanishes. Currently off everywhere.",
+      f: function (f) {
+        var t = f % 110;
+        return t < 45 ? sp("Uploading to Armis Cloud...", P.text, true) + " " + sp(timer(t), P.muted)
+          : trail("Uploaded to Armis Cloud", "4.0s", t - 45, true);
+      } },
+    { c: "E2+E3", k: null, n: "findings reveal", note: "Core — held beat, then dot-prefix findings land staggered, critical first.",
+      f: function (f) {
+        var t = f % 150, L = [];
+        if (t < 16) return sp("…", P.dim);
+        L.push(sp("● ", P.crit) + sp("CRITICAL ", P.crit, true) + sp("Exposed AWS access key", P.text, t < 26));
+        if (t >= 22) L.push(sp("           .env.backup:3 — verified live", P.muted));
+        if (t >= 40) L.push(sp("● ", P.high) + sp("HIGH     ", P.high, true) + sp("Prototype pollution — lodash 4.17.20", P.text, t < 50));
+        if (t >= 46) L.push(sp("           CVE-2025-31842 · reachable", P.muted));
+        return L.join("\n");
+      } },
+    { c: "F1", k: "arrowAlways", n: "arrow at completion", note: "The mark assembles at every scan's end — even with findings.",
+      f: function (f) { return arrowOnce(f % 120) + " " + sp("Scan complete", P.text, (f % 120) > 14) + sp("  18.4s total", P.muted); } },
+    { c: "F2", k: null, n: "all-clear reward", note: "Core — on a clean scan the arrow assembles beside a green verdict.",
+      f: function (f) { return arrowOnce(f % 140) + " " + sp("No findings — all clear", P.green, (f % 140) > 14) + sp("  1,204 files", P.muted); } },
+    { c: "F3", k: null, n: "severity count-up", note: "Core — the summary counts itself up with easing when it lands.",
+      f: function (f) {
+        var u = easeOut((f % 90) / 30);
+        return sp("● ", P.crit) + sp(Math.ceil(1 * u) + " critical", P.crit, true) + "   " +
+          sp("● ", P.high) + sp(Math.ceil(1 * u) + " high", P.high) + "   " +
+          sp("● ", P.med) + sp(Math.ceil(1 * u) + " medium", P.med);
+      } },
+    { c: "G1", k: null, n: "clickable scan ID", note: "Core — OSC 8 makes the ID a real hyperlink into Armis Cloud.",
+      f: function () { return sp("Scan ID: ", P.muted) + link("scn_9f2ce81b04") + sp("  ⌁ opens Armis Cloud", P.dim); } },
+    { c: "G2", k: null, n: "tab title", note: "Core — OSC 0 keeps the elapsed time in the terminal tab. Watch the title bar above, live.",
+      f: function (f) { return sp("⎇ tab: ", P.dim) + sp("armis · " + timer(f).slice(1, 6), P.text, true) + sp("  (window title, not transcript)", P.dim); } },
+    { c: "G5", k: "toast", n: "desktop notification", note: "OSC 777 fires when a scan finishes while you're in another window.",
+      f: function () { return sp("🔔 ", P.text) + sp("Armis — scan complete · 3 findings", P.muted); } }
+  ];
+
+  var pGrid = document.getElementById("pGrid"), pCards = [];
+  PIECES.forEach(function (p) {
+    var card = document.createElement("div");
+    card.className = "pcard" + (p.k ? "" : " core");
+    card.innerHTML = '<div class="pcard-head"><span class="pcode">' + p.c + '</span><span class="pname">' + p.n + "</span>" +
+      '<span class="ptag">' + (p.k ? "toggle" : "core") + "</span></div>" +
+      '<div class="pstrip"><pre></pre></div><p class="pnote">' + p.note + "</p>";
+    if (p.k) {
+      card.addEventListener("click", function () {
+        var on = !state[p.k];
+        state[p.k] = on;
+        if (p.k === "telemetry" && on) state.feed = false;
+        if (p.k === "feed" && on) state.telemetry = false;
+        syncFx(); draw();
+      });
+    }
+    pGrid.appendChild(card);
+    pCards.push({ el: card, pre: card.querySelector("pre"), p: p });
+  });
+  function syncPieces() {
+    pCards.forEach(function (pc) {
+      if (pc.p.k) pc.el.classList.toggle("on", !!state[pc.p.k]);
+    });
+  }
+  var _syncFx = syncFx;
+  syncFx = function () { _syncFx(); syncPieces(); };
+  var _draw = draw;
+  draw = function () {
+    _draw();
+    for (var i = 0; i < pCards.length; i++) pCards[i].pre.innerHTML = pCards[i].p.f(frame);
+  };
+
+  syncDesc();
+  syncFx();
+  draw();
+  setPlaying(playing && !reduced);
+})();
+</script>
