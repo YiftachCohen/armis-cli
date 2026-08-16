@@ -311,57 +311,74 @@ func TestFormatDuration(t *testing.T) {
 	}
 }
 
-func TestWaveFrame(t *testing.T) {
+func TestSpinnerFrames(t *testing.T) {
 	styles := output.NoColorStyles()
 
-	glyphSet := make(map[rune]bool)
-	for _, g := range waveGlyphs {
-		glyphSet[g] = true
+	if len(spinnerFrames) == 0 {
+		t.Fatal("spinnerFrames must not be empty")
 	}
 
 	seen := make(map[string]bool)
-	for frame := 0; frame < 100; frame++ {
-		result := waveFrame(styles, frame)
-		runes := []rune(result)
-		if len(runes) != waveWidth {
-			t.Fatalf("waveFrame(%d) has %d cells, want %d: %q", frame, len(runes), waveWidth, result)
+	for i, frame := range spinnerFrames {
+		if runes := []rune(frame); len(runes) != spinnerHeadWidth {
+			t.Errorf("spinnerFrames[%d] = %q has %d runes, want %d", i, frame, len(runes), spinnerHeadWidth)
 		}
-		for _, r := range runes {
-			if !glyphSet[r] {
-				t.Fatalf("waveFrame(%d) contains unexpected rune %q", frame, r)
+		seen[frame] = true
+	}
+	if len(seen) != len(spinnerFrames) {
+		t.Errorf("spinnerFrames should be distinct, got %d unique of %d", len(seen), len(spinnerFrames))
+	}
+
+	t.Run("head animates with plain styles", func(t *testing.T) {
+		rendered := make(map[string]bool)
+		for frame := 0; frame < len(spinnerFrames)*len(spinnerShadeCycle); frame++ {
+			got := spinnerHead(styles, frame)
+			if !seen[got] {
+				t.Fatalf("spinnerHead(%d) = %q, want one of the frame glyphs", frame, got)
 			}
+			rendered[got] = true
 		}
-		seen[result] = true
-	}
-	if len(seen) < 2 {
-		t.Error("waveFrame should animate across frames, but all frames were identical")
-	}
+		if len(rendered) != len(spinnerFrames) {
+			t.Errorf("head should cycle every glyph, saw %d of %d", len(rendered), len(spinnerFrames))
+		}
+	})
 }
 
-func TestShimmerText(t *testing.T) {
-	styles := output.NoColorStyles()
+func TestSpinnerHeadShades(t *testing.T) {
+	styles := output.DefaultStyles()
 
-	t.Run("preserves message content with plain styles", func(t *testing.T) {
-		msg := "Scanning for security issues..."
-		for frame := 0; frame < 60; frame++ {
-			if got := shimmerText(styles, msg, frame); got != msg {
-				t.Fatalf("shimmerText frame %d = %q, want %q", frame, got, msg)
+	t.Run("shade cycle stays in range and never rests", func(t *testing.T) {
+		if len(spinnerShadeCycle) < 2 {
+			t.Fatal("shade cycle must have at least two steps to shimmer")
+		}
+		for i, shade := range spinnerShadeCycle {
+			if shade < 0 || shade >= len(styles.SpinnerHead) {
+				t.Errorf("spinnerShadeCycle[%d] = %d, outside SpinnerHead (len %d)", i, shade, len(styles.SpinnerHead))
 			}
+		}
+		if spinnerShadeCycle[0] != 0 {
+			t.Errorf("cycle should start at the brightest shade, got %d", spinnerShadeCycle[0])
 		}
 	})
 
-	t.Run("empty message", func(t *testing.T) {
-		if got := shimmerText(styles, "", 5); got != "" {
-			t.Errorf("shimmerText on empty message = %q, want empty", got)
+	t.Run("shade advances with the frame", func(t *testing.T) {
+		first := spinnerHeadStyle(styles, 0)
+		var moved bool
+		for frame := 1; frame < len(spinnerShadeCycle)*spinnerFramesPerShade; frame++ {
+			if spinnerHeadStyle(styles, frame).GetForeground() != first.GetForeground() {
+				moved = true
+				break
+			}
+		}
+		if !moved {
+			t.Error("head shade should change across a shade cycle")
 		}
 	})
 
-	t.Run("unicode message preserved", func(t *testing.T) {
-		msg := "Étape en cours… 進行中"
-		for frame := 0; frame < 40; frame++ {
-			if got := shimmerText(styles, msg, frame); got != msg {
-				t.Fatalf("shimmerText frame %d = %q, want %q", frame, got, msg)
-			}
+	t.Run("falls back to SpinnerChar without a ramp", func(t *testing.T) {
+		bare := &output.Styles{SpinnerChar: styles.SpinnerChar}
+		if got := spinnerHeadStyle(bare, 3).GetForeground(); got != styles.SpinnerChar.GetForeground() {
+			t.Errorf("fallback style = %v, want SpinnerChar %v", got, styles.SpinnerChar.GetForeground())
 		}
 	})
 }
