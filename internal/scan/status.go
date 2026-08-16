@@ -9,6 +9,11 @@ import (
 	"github.com/ArmisSecurity/armis-cli/internal/model"
 )
 
+// AnalysisMessage is the live-line message shown while the backend analyzes an
+// uploaded artifact. It is the inProgressMsg passed to FormatScanStatus, and is
+// shared by the repo and image scanners so both read identically.
+const AnalysisMessage = "Scanning for security issues"
+
 // FormatScanStatus returns a human-readable message for the current scan phase.
 // The inProgressMsg parameter customizes the message for the IN_PROGRESS state,
 // allowing different scan types (repo, image) to show context-specific messages.
