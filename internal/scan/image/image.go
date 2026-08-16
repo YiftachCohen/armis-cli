@@ -152,9 +152,8 @@ func (s *Scanner) ScanTarball(ctx context.Context, tarballPath string) (*model.S
 	}
 	defer file.Close() //nolint:errcheck // file opened for reading
 
-	uploadSpinner := progress.NewSpinnerWithContext(ctx, "Uploading to Armis Cloud", s.noProgress)
-	uploadSpinner.Start()
-	defer uploadSpinner.Stop()
+	uploadPhase := progress.StartPhase(ctx, "Uploading to Armis Cloud", progress.WithPhaseDisabled(s.noProgress))
+	defer uploadPhase.Stop()
 
 	ingestOpts := api.IngestOptions{
 		TenantID:     s.tenantID,
@@ -173,29 +172,21 @@ func (s *Scanner) ScanTarball(ctx context.Context, tarballPath string) (*model.S
 		return nil, fmt.Errorf("failed to upload image: %w", err)
 	}
 
-	uploadSpinner.Stop()
-	styles := output.GetStyles()
-	fmt.Fprintf(os.Stderr, "%s %s\n\n",
-		styles.MutedText.Render("Scan initiated with ID:"),
-		styles.ScanID.Render(scanID))
+	// The scan ID is the user's handle on this scan; the summary prints it
+	// again prominently at the end.
+	uploadPhase.Succeed("Image uploaded", "scan "+scanID)
 
-	spinner := progress.NewSpinnerWithContext(ctx, "Scanning for security issues", s.noProgress)
-	spinner.Start()
-	defer spinner.Stop()
+	analysisPhase := progress.StartPhase(ctx, scan.AnalysisMessage, progress.WithPhaseDisabled(s.noProgress))
+	defer analysisPhase.Stop()
 
 	_, err = s.client.WaitForIngest(ctx, s.tenantID, scanID, s.pollInterval, s.timeout,
 		func(status model.IngestStatusData) {
-			spinner.Update(scan.FormatScanStatus(status.ScanStatus, "Scanning for security issues"))
+			analysisPhase.SetMessage(scan.FormatScanStatus(status.ScanStatus, scan.AnalysisMessage))
 		})
-	elapsed := spinner.GetElapsed()
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for scan: %w", err)
 	}
-
-	spinner.Stop()
-	fmt.Fprintf(os.Stderr, "%s %s\n\n",
-		styles.MutedText.Render("Scan completed in"),
-		styles.Duration.Render(scan.FormatElapsed(elapsed)))
+	analysisPhase.Succeed("Analysis complete", "")
 
 	fetchPhase := progress.StartPhase(ctx, "Retrieving results", progress.WithPhaseDisabled(s.noProgress))
 	defer fetchPhase.Stop()
