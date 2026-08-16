@@ -152,7 +152,7 @@ func (s *Scanner) ScanTarball(ctx context.Context, tarballPath string) (*model.S
 	}
 	defer file.Close() //nolint:errcheck // file opened for reading
 
-	uploadSpinner := progress.NewSpinnerWithContext(ctx, "Uploading to Armis Cloud...", s.noProgress)
+	uploadSpinner := progress.NewSpinnerWithContext(ctx, "Uploading to Armis Cloud", s.noProgress)
 	uploadSpinner.Start()
 	defer uploadSpinner.Stop()
 
@@ -179,13 +179,13 @@ func (s *Scanner) ScanTarball(ctx context.Context, tarballPath string) (*model.S
 		styles.MutedText.Render("Scan initiated with ID:"),
 		styles.ScanID.Render(scanID))
 
-	spinner := progress.NewSpinnerWithContext(ctx, "Scanning for security issues...", s.noProgress)
+	spinner := progress.NewSpinnerWithContext(ctx, "Scanning for security issues", s.noProgress)
 	spinner.Start()
 	defer spinner.Stop()
 
 	_, err = s.client.WaitForIngest(ctx, s.tenantID, scanID, s.pollInterval, s.timeout,
 		func(status model.IngestStatusData) {
-			spinner.Update(scan.FormatScanStatus(status.ScanStatus, "Scanning for security issues..."))
+			spinner.Update(scan.FormatScanStatus(status.ScanStatus, "Scanning for security issues"))
 		})
 	elapsed := spinner.GetElapsed()
 	if err != nil {
@@ -197,7 +197,7 @@ func (s *Scanner) ScanTarball(ctx context.Context, tarballPath string) (*model.S
 		styles.MutedText.Render("Scan completed in"),
 		styles.Duration.Render(scan.FormatElapsed(elapsed)))
 
-	fetchSpinner := progress.NewSpinnerWithContext(ctx, "Retrieving results...", s.noProgress)
+	fetchSpinner := progress.NewSpinnerWithContext(ctx, "Retrieving results", s.noProgress)
 	fetchSpinner.Start()
 
 	var findings []model.NormalizedFinding
@@ -211,7 +211,7 @@ func (s *Scanner) ScanTarball(ctx context.Context, tarballPath string) (*model.S
 			break
 		}
 		if attempt < maxFetchRetries {
-			fetchSpinner.Update(fmt.Sprintf("Retrieving results (retry %d/%d)...", attempt, maxFetchRetries-1))
+			fetchSpinner.Update(fmt.Sprintf("Retrieving results (retry %d/%d)", attempt, maxFetchRetries-1))
 			time.Sleep(s.fetchRetryInterval)
 		}
 	}

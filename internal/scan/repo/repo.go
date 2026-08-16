@@ -156,7 +156,7 @@ func (s *Scanner) Scan(ctx context.Context, path string) (*model.ScanResult, err
 		return nil, fmt.Errorf("directory size (%d bytes) exceeds maximum allowed size (%d bytes)", rawSize, MaxRepoSize)
 	}
 
-	spinner := progress.NewSpinnerWithContext(ctx, "Preparing repository for upload...", s.noProgress)
+	spinner := progress.NewSpinnerWithContext(ctx, "Preparing repository for upload", s.noProgress)
 	spinner.Start()
 	defer spinner.Stop()
 
@@ -202,7 +202,7 @@ func (s *Scanner) Scan(ctx context.Context, path string) (*model.ScanResult, err
 		return nil, fmt.Errorf("failed to rewind tarball: %w", err)
 	}
 
-	spinner.Update("Uploading to Armis Cloud...")
+	spinner.Update("Uploading to Armis Cloud")
 
 	ingestOpts := api.IngestOptions{
 		TenantID:     s.tenantID,
@@ -238,13 +238,13 @@ func (s *Scanner) Scan(ctx context.Context, path string) (*model.ScanResult, err
 		styles.MutedText.Render("Scan initiated with ID:"),
 		styles.ScanID.Render(scanID))
 
-	analysisSpinner := progress.NewSpinnerWithContext(ctx, "Scanning for security issues...", s.noProgress)
+	analysisSpinner := progress.NewSpinnerWithContext(ctx, "Scanning for security issues", s.noProgress)
 	analysisSpinner.Start()
 	defer analysisSpinner.Stop()
 
 	_, err = s.client.WaitForIngest(ctx, s.tenantID, scanID, s.pollInterval, s.timeout,
 		func(status model.IngestStatusData) {
-			analysisSpinner.Update(scan.FormatScanStatus(status.ScanStatus, "Scanning for security issues..."))
+			analysisSpinner.Update(scan.FormatScanStatus(status.ScanStatus, "Scanning for security issues"))
 		})
 	elapsed := analysisSpinner.GetElapsed()
 	analysisSpinner.Stop()
@@ -256,7 +256,7 @@ func (s *Scanner) Scan(ctx context.Context, path string) (*model.ScanResult, err
 		styles.MutedText.Render("Scan completed in"),
 		styles.Duration.Render(scan.FormatElapsed(elapsed)))
 
-	fetchSpinner := progress.NewSpinnerWithContext(ctx, "Retrieving results...", s.noProgress)
+	fetchSpinner := progress.NewSpinnerWithContext(ctx, "Retrieving results", s.noProgress)
 	fetchSpinner.Start()
 	defer fetchSpinner.Stop()
 
@@ -271,7 +271,7 @@ func (s *Scanner) Scan(ctx context.Context, path string) (*model.ScanResult, err
 			break
 		}
 		if attempt < maxFetchRetries {
-			fetchSpinner.Update(fmt.Sprintf("Retrieving results (retry %d/%d)...", attempt, maxFetchRetries-1))
+			fetchSpinner.Update(fmt.Sprintf("Retrieving results (retry %d/%d)", attempt, maxFetchRetries-1))
 			time.Sleep(s.fetchRetryInterval)
 		}
 	}

@@ -44,6 +44,11 @@ var (
 	colorMuted   = lipgloss.AdaptiveColor{Light: "#4B5563", Dark: colorGray500} // gray-600 / gray-500
 	colorAccent  = lipgloss.AdaptiveColor{Light: "#7c3aed", Dark: "#7c3aed"}    // purple-600 (Armis brand)
 
+	// Breathing-ellipsis dots - brand violet, brightest for the dot that just lit
+	colorDotLit   = lipgloss.AdaptiveColor{Light: "#7C3AED", Dark: "#C4B5FD"} // violet-600 / violet-300
+	colorDotAged  = lipgloss.AdaptiveColor{Light: "#8B5CF6", Dark: "#8B5CF6"} // violet-500
+	colorDotUnlit = lipgloss.AdaptiveColor{Light: "#C4B5FD", Dark: "#5B21B6"} // violet-300 / violet-800
+
 	// Diff colors - darker on light bg for contrast
 	colorDiffAdd    = lipgloss.AdaptiveColor{Light: "#16A34A", Dark: "#22C55E"}       // green-600 / green-500
 	colorDiffRemove = lipgloss.AdaptiveColor{Light: colorRed600, Dark: "#EF4444"}     // red-600 / red-500
@@ -128,9 +133,12 @@ type Styles struct {
 	LocationFg lipgloss.Style
 
 	// Spinner styles
-	SpinnerChar  lipgloss.Style // The animated spinner character
-	SpinnerText  lipgloss.Style // The message text
-	SpinnerTimer lipgloss.Style // The elapsed time [00:00]
+	SpinnerChar     lipgloss.Style // The animated spinner character
+	SpinnerText     lipgloss.Style // The message text
+	SpinnerTimer    lipgloss.Style // The elapsed time [00:00]
+	SpinnerDotLit   lipgloss.Style // Newest dot of the breathing ellipsis
+	SpinnerDotAged  lipgloss.Style // Dots lit on an earlier step
+	SpinnerDotUnlit lipgloss.Style // Dots not lit yet (holds the width)
 
 	// Info styles
 	ScanID          lipgloss.Style // For highlighting scan IDs
@@ -264,9 +272,12 @@ func DefaultStyles() *Styles {
 		LocationFg: lipgloss.NewStyle().Bold(true).Foreground(colorBright),
 
 		// Spinner styles
-		SpinnerChar:  lipgloss.NewStyle().Bold(true).Foreground(colorAccent),
-		SpinnerText:  lipgloss.NewStyle(),
-		SpinnerTimer: lipgloss.NewStyle().Foreground(colorMuted),
+		SpinnerChar:     lipgloss.NewStyle().Bold(true).Foreground(colorAccent),
+		SpinnerText:     lipgloss.NewStyle(),
+		SpinnerTimer:    lipgloss.NewStyle().Foreground(colorMuted),
+		SpinnerDotLit:   lipgloss.NewStyle().Bold(true).Foreground(colorDotLit),
+		SpinnerDotAged:  lipgloss.NewStyle().Foreground(colorDotAged),
+		SpinnerDotUnlit: lipgloss.NewStyle().Foreground(colorDotUnlit),
 
 		// Info styles
 		ScanID:         lipgloss.NewStyle().Bold(true).Foreground(colorAccent),
@@ -338,9 +349,12 @@ func NoColorStyles() *Styles {
 		Underline:  plain,
 		LocationFg: plain,
 
-		SpinnerChar:  plain,
-		SpinnerText:  plain,
-		SpinnerTimer: plain,
+		SpinnerChar:     plain,
+		SpinnerText:     plain,
+		SpinnerTimer:    plain,
+		SpinnerDotLit:   plain,
+		SpinnerDotAged:  plain,
+		SpinnerDotUnlit: plain,
 
 		ScanID:          plain,
 		StatusComplete:  plain,
