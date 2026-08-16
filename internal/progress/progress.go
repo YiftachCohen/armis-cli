@@ -29,6 +29,17 @@ const (
 	// spinnerHeadWidth is the display width, in columns, of the spinner glyph.
 	spinnerHeadWidth = 1
 
+	// ellipsisDots is how many trailing dots the breathing ellipsis cycles
+	// through. The slots are always rendered, so the line width never jitters.
+	ellipsisDots = 3
+
+	// ellipsisStep is how long each dot stays before the next one lights up.
+	// The cycle is ellipsisDots+1 steps long (none lit through all lit).
+	ellipsisStep = 640 * time.Millisecond
+
+	// ellipsisGlyph is the character used for one dot of the ellipsis.
+	ellipsisGlyph = "."
+
 	// ANSI escape sequences for cursor visibility control.
 	// These are standard VT100/xterm sequences supported by all modern terminals.
 	cursorHide = "\033[?25l"
@@ -304,6 +315,7 @@ func (s *Spinner) Start() {
 				frame.WriteString(spinnerHead(styles, i))
 				frame.WriteByte(' ')
 				frame.WriteString(styles.SpinnerText.Render(msg))
+				frame.WriteString(breathingEllipsis(styles, elapsed))
 				if timerStr != "" {
 					frame.WriteByte(' ')
 					frame.WriteString(styles.SpinnerTimer.Render(timerStr))
@@ -375,10 +387,48 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%02d:%02d", minutes, seconds)
 }
 
+// --- Breathing ellipsis --------------------------------------------------
+//
+// The live message ends in three dots that light up one per step and reset
+// once all three are on, so the line reads as breathing rather than blinking.
+// Every slot is always emitted, so the width is constant and the timer never
+// shifts. The dot that just lit is the brightest, earlier ones sit a shade
+// back, and slots that are not lit yet are dim.
+
+// breathingEllipsis renders the trailing dots for the given elapsed time.
+func breathingEllipsis(styles *output.Styles, elapsed time.Duration) string {
+	lit := int(elapsed/ellipsisStep) % (ellipsisDots + 1)
+
+	var b strings.Builder
+	for i := 0; i < ellipsisDots; i++ {
+		switch {
+		case i == lit-1:
+			b.WriteString(styles.SpinnerDotLit.Render(ellipsisGlyph))
+		case i < lit:
+			b.WriteString(styles.SpinnerDotAged.Render(ellipsisGlyph))
+		default:
+			b.WriteString(unlitDot(styles))
+		}
+	}
+	return b.String()
+}
+
+// unlitDot renders a slot whose dot has not lit yet. The dim shade only reads
+// as unlit while colors are on; with --color=never (or any writer downsampled
+// to the Ascii profile) it would be an ordinary dot and the ellipsis would
+// look static, so the slot falls back to a blank of the same width. Losing
+// color must not cost the animation (spec §7).
+func unlitDot(styles *output.Styles) string {
+	if dimmed := styles.SpinnerDotUnlit.Render(ellipsisGlyph); dimmed != ellipsisGlyph {
+		return dimmed
+	}
+	return " "
+}
+
 // --- Width handling ------------------------------------------------------
 
 // maxMessageRunes returns how many message runes fit on the current terminal
-// line alongside the spinner glyph, spacing, and timer. Returns 0 (no limit) when the
+// line alongside the spinner glyph, ellipsis, spacing, and timer. Returns 0 (no limit) when the
 // writer is not a terminal or its width cannot be determined. Called every
 // frame so resizes are picked up; the underlying ioctl is cheap.
 func maxMessageRunes(w io.Writer, timerLen int) int {
@@ -394,9 +444,10 @@ func maxMessageRunes(w io.Writer, timerLen int) int {
 	if err != nil || cols <= 0 {
 		return 0
 	}
-	// spinner glyph + space + space-before-timer + timer + one column so the
-	// line never touches the last cell (some terminals wrap eagerly there).
-	avail := cols - spinnerHeadWidth - 1 - 1 - timerLen - 1
+	// spinner glyph + space + ellipsis + space-before-timer + timer + one
+	// column so the line never touches the last cell (some terminals wrap
+	// eagerly there).
+	avail := cols - spinnerHeadWidth - 1 - ellipsisDots - 1 - timerLen - 1
 	if avail < 1 {
 		return 1
 	}

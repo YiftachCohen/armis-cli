@@ -383,6 +383,53 @@ func TestSpinnerHeadShades(t *testing.T) {
 	})
 }
 
+func TestBreathingEllipsis(t *testing.T) {
+	styles := output.NoColorStyles()
+
+	t.Run("cycles through the dots with plain styles", func(t *testing.T) {
+		tests := []struct {
+			name     string
+			elapsed  time.Duration
+			expected string
+		}{
+			{name: "start of cycle", elapsed: 0, expected: "   "},
+			{name: "first dot", elapsed: ellipsisStep, expected: ".  "},
+			{name: "second dot", elapsed: 2 * ellipsisStep, expected: ".. "},
+			{name: "third dot", elapsed: 3 * ellipsisStep, expected: "..."},
+			{name: "wraps around", elapsed: 4 * ellipsisStep, expected: "   "},
+			{name: "mid step holds", elapsed: ellipsisStep + ellipsisStep/2, expected: ".  "},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				if got := breathingEllipsis(styles, tt.elapsed); got != tt.expected {
+					t.Errorf("breathingEllipsis(%v) = %q, want %q", tt.elapsed, got, tt.expected)
+				}
+			})
+		}
+	})
+
+	t.Run("width is constant across the cycle", func(t *testing.T) {
+		for step := 0; step <= ellipsisDots+1; step++ {
+			got := breathingEllipsis(styles, time.Duration(step)*ellipsisStep)
+			if len([]rune(got)) != ellipsisDots {
+				t.Errorf("breathingEllipsis at step %d = %q, want %d cells", step, got, ellipsisDots)
+			}
+		}
+	})
+
+	t.Run("animates without color", func(t *testing.T) {
+		seen := make(map[string]bool)
+		for step := 0; step <= ellipsisDots; step++ {
+			seen[breathingEllipsis(styles, time.Duration(step)*ellipsisStep)] = true
+		}
+		if len(seen) != ellipsisDots+1 {
+			t.Errorf("ellipsis should animate under --color=never; got %d distinct frames, want %d",
+				len(seen), ellipsisDots+1)
+		}
+	})
+}
+
 func TestTruncateMessage(t *testing.T) {
 	tests := []struct {
 		name     string

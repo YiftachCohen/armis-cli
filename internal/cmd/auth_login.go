@@ -83,7 +83,7 @@ func performDeviceLogin(ctx context.Context, clientID string) (*auth.StoredToken
 	pollCtx, cancelPoll := context.WithTimeout(ctx, time.Duration(da.ExpiresIn)*time.Second)
 	defer cancelPoll()
 
-	spinner := progress.NewSpinner("Waiting for you to finish signing in…", noProgress)
+	spinner := progress.NewSpinner("Waiting for you to finish signing in", noProgress)
 	spinner.Start()
 	stored, err := deviceClient.PollToken(pollCtx, da.DeviceCode, clientID, da.Interval)
 	spinner.Stop()

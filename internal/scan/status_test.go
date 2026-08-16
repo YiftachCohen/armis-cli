@@ -14,15 +14,15 @@ func TestFormatScanStatus(t *testing.T) {
 		inProgressMsg string
 		want          string
 	}{
-		{"initiated", "INITIATED", "Scanning...", "Scan initiated, preparing analysis..."},
-		{"initiated lowercase", "initiated", "Scanning...", "Scan initiated, preparing analysis..."},
-		{"in_progress", "IN_PROGRESS", "Analyzing code...", "Analyzing code..."},
-		{"in_progress lowercase", "in_progress", "Scanning image...", "Scanning image..."},
-		{"completed", "COMPLETED", "Scanning...", "Scan completed, preparing results..."},
-		{"failed", "FAILED", "Scanning...", "Scan encountered an error"},
-		{"stopped", "STOPPED", "Scanning...", "Scan was stopped"},
-		{"unknown", "UNKNOWN", "Scanning...", "Scanning... [UNKNOWN]"},
-		{"empty", "", "Scanning...", "Scanning... []"},
+		{"initiated", "INITIATED", "Scanning", "Scan initiated, preparing analysis"},
+		{"initiated lowercase", "initiated", "Scanning", "Scan initiated, preparing analysis"},
+		{"in_progress", "IN_PROGRESS", "Analyzing code", "Analyzing code"},
+		{"in_progress lowercase", "in_progress", "Scanning image", "Scanning image"},
+		{"completed", "COMPLETED", "Scanning", "Scan completed, preparing results"},
+		{"failed", "FAILED", "Scanning", "Scan encountered an error"},
+		{"stopped", "STOPPED", "Scanning", "Scan was stopped"},
+		{"unknown", "UNKNOWN", "Scanning", "Scanning [UNKNOWN]"},
+		{"empty", "", "Scanning", "Scanning []"},
 	}
 
 	for _, tt := range tests {
