@@ -311,59 +311,26 @@ func TestFormatDuration(t *testing.T) {
 	}
 }
 
-func TestWaveFrame(t *testing.T) {
+func TestSpinnerFrames(t *testing.T) {
 	styles := output.NoColorStyles()
 
-	glyphSet := make(map[rune]bool)
-	for _, g := range waveGlyphs {
-		glyphSet[g] = true
+	if len(spinnerFrames) == 0 {
+		t.Fatal("spinnerFrames must not be empty")
 	}
 
 	seen := make(map[string]bool)
-	for frame := 0; frame < 100; frame++ {
-		result := waveFrame(styles, frame)
-		runes := []rune(result)
-		if len(runes) != waveWidth {
-			t.Fatalf("waveFrame(%d) has %d cells, want %d: %q", frame, len(runes), waveWidth, result)
+	for i, frame := range spinnerFrames {
+		if runes := []rune(frame); len(runes) != spinnerHeadWidth {
+			t.Errorf("spinnerFrames[%d] = %q has %d runes, want %d", i, frame, len(runes), spinnerHeadWidth)
 		}
-		for _, r := range runes {
-			if !glyphSet[r] {
-				t.Fatalf("waveFrame(%d) contains unexpected rune %q", frame, r)
-			}
+		if got := styles.SpinnerChar.Render(frame); got != frame {
+			t.Errorf("plain styles should render frame %q unchanged, got %q", frame, got)
 		}
-		seen[result] = true
+		seen[frame] = true
 	}
-	if len(seen) < 2 {
-		t.Error("waveFrame should animate across frames, but all frames were identical")
+	if len(seen) != len(spinnerFrames) {
+		t.Errorf("spinnerFrames should be distinct, got %d unique of %d", len(seen), len(spinnerFrames))
 	}
-}
-
-func TestShimmerText(t *testing.T) {
-	styles := output.NoColorStyles()
-
-	t.Run("preserves message content with plain styles", func(t *testing.T) {
-		msg := "Scanning for security issues..."
-		for frame := 0; frame < 60; frame++ {
-			if got := shimmerText(styles, msg, frame); got != msg {
-				t.Fatalf("shimmerText frame %d = %q, want %q", frame, got, msg)
-			}
-		}
-	})
-
-	t.Run("empty message", func(t *testing.T) {
-		if got := shimmerText(styles, "", 5); got != "" {
-			t.Errorf("shimmerText on empty message = %q, want empty", got)
-		}
-	})
-
-	t.Run("unicode message preserved", func(t *testing.T) {
-		msg := "Étape en cours… 進行中"
-		for frame := 0; frame < 40; frame++ {
-			if got := shimmerText(styles, msg, frame); got != msg {
-				t.Fatalf("shimmerText frame %d = %q, want %q", frame, got, msg)
-			}
-		}
-	})
 }
 
 func TestTruncateMessage(t *testing.T) {
