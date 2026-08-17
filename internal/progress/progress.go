@@ -5,14 +5,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/ArmisSecurity/armis-cli/internal/output"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/schollz/progressbar/v3"
 	"golang.org/x/term"
 )
@@ -23,7 +21,8 @@ const (
 	DefaultSpinnerTimeout = 30 * time.Minute
 
 	// spinnerFrameDelay is the delay between animation frames. 80ms (12.5 fps)
-	// keeps the wave and shimmer fluid without noticeable CPU or write pressure.
+	// is the approved tempo — the legacy 100ms reads as discrete frames where
+	// 80ms reads as continuous motion (spec feature A1).
 	spinnerFrameDelay = 80 * time.Millisecond
 
 	// ANSI escape sequences for cursor visibility control.
@@ -265,9 +264,13 @@ func (s *Spinner) Start() {
 
 				var frame strings.Builder
 				frame.WriteString(clearLine())
-				frame.WriteString(waveFrame(styles, i))
+				frame.WriteString(styles.SpinnerChar.Render(spinnerFrames[i%len(spinnerFrames)]))
 				frame.WriteByte(' ')
-				frame.WriteString(shimmerText(styles, msg, i))
+				base, hasEllipsis := splitEllipsis(msg)
+				frame.WriteString(styles.SpinnerText.Render(base))
+				if hasEllipsis {
+					frame.WriteString(renderEllipsis(styles, i))
+				}
 				if timerStr != "" {
 					frame.WriteByte(' ')
 					frame.WriteString(styles.SpinnerTimer.Render(timerStr))
@@ -339,129 +342,70 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%02d:%02d", minutes, seconds)
 }
 
-// --- Wave loader ---------------------------------------------------------
+// --- Spinner head & breathing ellipsis -----------------------------------
 //
-// The loader head is a small strip of braille density glyphs animated as a
-// travelling sine wave. Each cell's amplitude picks both its glyph and a
-// shade from the brand gradient (peaks are brightest), so the wave reads as
-// a pulse of light moving through the strip. All shading goes through the
-// central style set, which degrades to monochrome under --color=never while
-// the wave shape keeps animating (glyph choice is not a color concern).
+// The approved look (see docs/design/scan-experience-spec.md, feature A1):
+// classic braille frames at the 80ms tick with an adaptive violet head
+// (SpinnerChar style — violet-600 on light, violet-400 on dark). Messages
+// ending in "..." get the B5 breathing ellipsis: the dots fill bright and
+// drain dim on a slow cycle instead of sitting static.
 
-// waveWidth is the number of cells in the animated wave strip.
-const waveWidth = 5
+// spinnerFrames are the classic braille spinner frames.
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
-const (
-	// waveSpeed is the phase advance per frame (radians); one full swell
-	// takes ~1.1s at the 80ms frame delay.
-	waveSpeed = 0.45
-	// wavePhaseStep is the phase offset between adjacent cells, which gives
-	// the wave its spatial slope.
-	wavePhaseStep = 0.85
-)
-
-// waveGlyphs are braille density glyphs indexed by amplitude, flat first.
-// U+2800 (blank braille) keeps the trough the same advance width as the
-// other cells in monospace fonts.
-var waveGlyphs = []rune{'⠀', '⣀', '⣤', '⣶', '⣿'}
-
-// waveFrame renders one frame of the wave strip.
-func waveFrame(styles *output.Styles, frame int) string {
-	var b strings.Builder
-	for j := 0; j < waveWidth; j++ {
-		phase := float64(frame)*waveSpeed - float64(j)*wavePhaseStep
-		level := int((math.Sin(phase) + 1) / 2 * float64(len(waveGlyphs)))
-		if level >= len(waveGlyphs) {
-			level = len(waveGlyphs) - 1
-		}
-		b.WriteString(waveStyle(styles, level).Render(string(waveGlyphs[level])))
+// splitEllipsis splits a trailing "..." off the message so the dots can be
+// animated separately. Returns the base text and whether dots were present.
+func splitEllipsis(msg string) (string, bool) {
+	if strings.HasSuffix(msg, "...") {
+		return strings.TrimSuffix(msg, "..."), true
 	}
-	return b.String()
+	return msg, false
 }
 
-// waveStyle maps a wave amplitude to a gradient shade (peaks brightest).
-func waveStyle(styles *output.Styles, level int) lipgloss.Style {
-	if len(styles.SpinnerWave) == 0 {
-		return styles.SpinnerChar
-	}
-	idx := len(waveGlyphs) - 1 - level
-	if idx >= len(styles.SpinnerWave) {
-		idx = len(styles.SpinnerWave) - 1
-	}
-	return styles.SpinnerWave[idx]
-}
+// ellipsisPeriod is ticks per dot step; 8 ticks × 80ms ≈ 640ms per step.
+const ellipsisPeriod = 8
 
-// --- Shimmer -------------------------------------------------------------
-//
-// A highlight band sweeps across the message text, then rests before the
-// next pass. Runes are grouped into contiguous same-intensity segments so a
-// frame emits at most a handful of escape sequences.
-
-const (
-	// shimmerCoreRadius is the half-width (in runes) of the bright center.
-	shimmerCoreRadius = 1
-	// shimmerEdgeRadius is the half-width of the softer surrounding band.
-	shimmerEdgeRadius = 3
-	// shimmerRestCols is extra travel past the text end so the highlight
-	// rests between sweeps instead of looping continuously.
-	shimmerRestCols = 16
-)
-
-// shimmerText renders the message with the shimmer highlight for one frame.
-func shimmerText(styles *output.Styles, msg string, frame int) string {
-	runes := []rune(msg)
-	if len(runes) == 0 {
-		return msg
-	}
-	cycle := len(runes) + shimmerRestCols
-	center := frame%cycle - shimmerEdgeRadius
-
+// renderEllipsis renders the B5 breathing dots for the given tick: dots fill
+// 0→3 then reset; the newest dot is the bright spinner color, earlier dots
+// muted, absent dots dim placeholders (keeping the line width stable).
+func renderEllipsis(styles *output.Styles, tick int) string {
+	n := (tick / ellipsisPeriod) % 4
 	var b strings.Builder
-	var seg strings.Builder
-	segLevel := 0
-	flush := func() {
-		if seg.Len() == 0 {
-			return
-		}
-		switch segLevel {
-		case 2:
-			b.WriteString(styles.SpinnerShimmerCore.Render(seg.String()))
-		case 1:
-			b.WriteString(styles.SpinnerShimmerEdge.Render(seg.String()))
-		default:
-			b.WriteString(styles.SpinnerText.Render(seg.String()))
-		}
-		seg.Reset()
-	}
-	for k, r := range runes {
-		d := k - center
-		if d < 0 {
-			d = -d
-		}
-		level := 0
+	for i := 0; i < 3; i++ {
 		switch {
-		case d <= shimmerCoreRadius:
-			level = 2
-		case d <= shimmerEdgeRadius:
-			level = 1
+		case i < n && i == n-1:
+			b.WriteString(styles.SpinnerChar.Render("."))
+		case i < n:
+			b.WriteString(styles.MutedText.Render("."))
+		default:
+			b.WriteString(styles.ProgressEmpty.Render("."))
 		}
-		if level != segLevel {
-			flush()
-			segLevel = level
-		}
-		seg.WriteRune(r)
 	}
-	flush()
 	return b.String()
 }
 
 // --- Width handling ------------------------------------------------------
 
 // maxMessageRunes returns how many message runes fit on the current terminal
-// line alongside the wave, spacing, and timer. Returns 0 (no limit) when the
-// writer is not a terminal or its width cannot be determined. Called every
-// frame so resizes are picked up; the underlying ioctl is cheap.
+// line alongside the spinner, spacing, and timer. Returns 0 (no limit) when
+// the writer is not a terminal or its width cannot be determined. Called
+// every frame so resizes are picked up; the underlying ioctl is cheap.
 func maxMessageRunes(w io.Writer, timerLen int) int {
+	cols := terminalCols(w)
+	if cols <= 0 {
+		return 0
+	}
+	// spinner + space + space-before-timer + timer + one column so the line
+	// never touches the last cell (some terminals wrap eagerly there).
+	avail := cols - 1 - 1 - 1 - timerLen - 1
+	if avail < 1 {
+		return 1
+	}
+	return avail
+}
+
+// terminalCols returns the writer's terminal width, or 0 if not a terminal.
+func terminalCols(w io.Writer) int {
 	f, ok := w.(fdWriter)
 	if !ok {
 		return 0
@@ -474,13 +418,7 @@ func maxMessageRunes(w io.Writer, timerLen int) int {
 	if err != nil || cols <= 0 {
 		return 0
 	}
-	// wave + space + space-before-timer + timer + one column so the line
-	// never touches the last cell (some terminals wrap eagerly there).
-	avail := cols - waveWidth - 1 - 1 - timerLen - 1
-	if avail < 1 {
-		return 1
-	}
-	return avail
+	return cols
 }
 
 // truncateMessage trims msg to maxRunes, appending an ellipsis when it was

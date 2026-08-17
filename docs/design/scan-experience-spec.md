@@ -1,6 +1,9 @@
 # Scan Experience — Implementation Spec
 
-Status: **design approved via interactive prototypes, pending final toggle selection**
+Status: **set 3 implemented on this branch** (`internal/progress`: `phase.go`,
+`arrow.go`, `osc.go`, `format.go`; call sites in `internal/scan/{repo,image}`).
+Remaining: C4/C2's honest analysis feed awaits the backend events endpoint (§6.1);
+G1 activates via `ARMIS_CONSOLE_URL` once the platform confirms the pattern (§6.2).
 Branch: `claude/cli-loader-animation-8ohucn`
 Prototypes (living spec — the visual source of truth):
 - **`docs/design/scan-experience-prototype.html`** — in-repo, self-contained; open in

@@ -311,59 +311,48 @@ func TestFormatDuration(t *testing.T) {
 	}
 }
 
-func TestWaveFrame(t *testing.T) {
-	styles := output.NoColorStyles()
-
-	glyphSet := make(map[rune]bool)
-	for _, g := range waveGlyphs {
-		glyphSet[g] = true
+func TestSplitEllipsis(t *testing.T) {
+	tests := []struct {
+		msg      string
+		wantBase string
+		wantDots bool
+	}{
+		{"Scanning for security issues...", "Scanning for security issues", true},
+		{"Packaging repository", "Packaging repository", false},
+		{"...", "", true},
+		{"", "", false},
+		{"ends in two..", "ends in two..", false},
 	}
-
-	seen := make(map[string]bool)
-	for frame := 0; frame < 100; frame++ {
-		result := waveFrame(styles, frame)
-		runes := []rune(result)
-		if len(runes) != waveWidth {
-			t.Fatalf("waveFrame(%d) has %d cells, want %d: %q", frame, len(runes), waveWidth, result)
+	for _, tt := range tests {
+		base, dots := splitEllipsis(tt.msg)
+		if base != tt.wantBase || dots != tt.wantDots {
+			t.Errorf("splitEllipsis(%q) = (%q, %v), want (%q, %v)",
+				tt.msg, base, dots, tt.wantBase, tt.wantDots)
 		}
-		for _, r := range runes {
-			if !glyphSet[r] {
-				t.Fatalf("waveFrame(%d) contains unexpected rune %q", frame, r)
-			}
-		}
-		seen[result] = true
-	}
-	if len(seen) < 2 {
-		t.Error("waveFrame should animate across frames, but all frames were identical")
 	}
 }
 
-func TestShimmerText(t *testing.T) {
+func TestRenderEllipsisPlainStyles(t *testing.T) {
 	styles := output.NoColorStyles()
-
-	t.Run("preserves message content with plain styles", func(t *testing.T) {
-		msg := "Scanning for security issues..."
-		for frame := 0; frame < 60; frame++ {
-			if got := shimmerText(styles, msg, frame); got != msg {
-				t.Fatalf("shimmerText frame %d = %q, want %q", frame, got, msg)
-			}
+	// With plain styles the breathing ellipsis must always render exactly
+	// three dots (width stability is what keeps redraws from smearing).
+	for tick := 0; tick < 40; tick++ {
+		got := renderEllipsis(styles, tick)
+		if got != "..." {
+			t.Fatalf("renderEllipsis(tick=%d) = %q, want %q", tick, got, "...")
 		}
-	})
+	}
+}
 
-	t.Run("empty message", func(t *testing.T) {
-		if got := shimmerText(styles, "", 5); got != "" {
-			t.Errorf("shimmerText on empty message = %q, want empty", got)
+func TestSpinnerFrames(t *testing.T) {
+	if len(spinnerFrames) != 10 {
+		t.Fatalf("expected 10 classic frames, got %d", len(spinnerFrames))
+	}
+	for i, f := range spinnerFrames {
+		if len([]rune(f)) != 1 {
+			t.Errorf("frame %d %q should be a single rune", i, f)
 		}
-	})
-
-	t.Run("unicode message preserved", func(t *testing.T) {
-		msg := "Étape en cours… 進行中"
-		for frame := 0; frame < 40; frame++ {
-			if got := shimmerText(styles, msg, frame); got != msg {
-				t.Fatalf("shimmerText frame %d = %q, want %q", frame, got, msg)
-			}
-		}
-	})
+	}
 }
 
 func TestTruncateMessage(t *testing.T) {

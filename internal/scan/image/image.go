@@ -152,15 +152,24 @@ func (s *Scanner) ScanTarball(ctx context.Context, tarballPath string) (*model.S
 	}
 	defer file.Close() //nolint:errcheck // file opened for reading
 
-	uploadSpinner := progress.NewSpinnerWithContext(ctx, "Uploading to Armis Cloud...", s.noProgress)
-	uploadSpinner.Start()
-	defer uploadSpinner.Stop()
+	scanStart := time.Now()
+	upPhase := progress.StartPhase(ctx, "Uploading to Armis Cloud", s.noProgress,
+		progress.WithTitleClock(scanStart))
+	defer upPhase.Fail()
+	progress.TaskbarProgress(os.Stderr, 0)
+	totalSize := info.Size()
+	upload := progress.NewCountingReader(file, func(sent int64) {
+		upPhase.SetDetail(progress.FormatBytes(sent) + " / " + progress.FormatBytes(totalSize))
+		if totalSize > 0 {
+			progress.TaskbarProgress(os.Stderr, int(sent*100/totalSize))
+		}
+	})
 
 	ingestOpts := api.IngestOptions{
 		TenantID:     s.tenantID,
 		ArtifactType: "image",
 		Filename:     filepath.Base(tarballPath),
-		Data:         file,
+		Data:         upload,
 		Size:         info.Size(),
 	}
 	if s.sbomVEXOpts != nil {
@@ -173,32 +182,41 @@ func (s *Scanner) ScanTarball(ctx context.Context, tarballPath string) (*model.S
 		return nil, fmt.Errorf("failed to upload image: %w", err)
 	}
 
-	uploadSpinner.Stop()
+	upPhase.Succeed("Uploaded to Armis Cloud", scan.FormatElapsed(upPhase.Elapsed()))
 	styles := output.GetStyles()
-	fmt.Fprintf(os.Stderr, "%s %s\n\n",
-		styles.MutedText.Render("Scan initiated with ID:"),
-		styles.ScanID.Render(scanID))
+	idText := styles.ScanID.Render(scanID)
+	if url := progress.ConsoleURL(scanID); url != "" {
+		idText = progress.Hyperlink(os.Stderr, idText, url)
+	}
+	fmt.Fprintf(os.Stderr, "%s %s\n",
+		styles.MutedText.Render("Scan ID:"), idText)
 
-	spinner := progress.NewSpinnerWithContext(ctx, "Scanning for security issues...", s.noProgress)
-	spinner.Start()
-	defer spinner.Stop()
-
+	anPhase := progress.StartPhase(ctx, "Scan initiated, preparing analysis", s.noProgress,
+		progress.WithTitleClock(scanStart))
+	defer anPhase.Fail()
+	progress.TaskbarBusy(os.Stderr)
+	verbsActive := false
 	_, err = s.client.WaitForIngest(ctx, s.tenantID, scanID, s.pollInterval, s.timeout,
 		func(status model.IngestStatusData) {
-			spinner.Update(scan.FormatScanStatus(status.ScanStatus, "Scanning for security issues..."))
+			if strings.EqualFold(status.ScanStatus, "IN_PROGRESS") {
+				if !verbsActive {
+					anPhase.SetVerbs(scan.AnalysisVerbs)
+					verbsActive = true
+				}
+				return
+			}
+			verbsActive = false
+			msg := scan.FormatScanStatus(status.ScanStatus, "Scanning for security issues...")
+			anPhase.SetMessage(strings.TrimSuffix(msg, "..."))
 		})
-	elapsed := spinner.GetElapsed()
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for scan: %w", err)
 	}
+	anPhase.Succeed("Analysis complete", scan.FormatElapsed(anPhase.Elapsed()))
 
-	spinner.Stop()
-	fmt.Fprintf(os.Stderr, "%s %s\n\n",
-		styles.MutedText.Render("Scan completed in"),
-		styles.Duration.Render(scan.FormatElapsed(elapsed)))
-
-	fetchSpinner := progress.NewSpinnerWithContext(ctx, "Retrieving results...", s.noProgress)
-	fetchSpinner.Start()
+	fetchPhase := progress.StartPhase(ctx, "Retrieving results", s.noProgress,
+		progress.WithTitleClock(scanStart))
+	defer fetchPhase.Fail()
 
 	var findings []model.NormalizedFinding
 	const maxFetchRetries = 5
@@ -211,16 +229,19 @@ func (s *Scanner) ScanTarball(ctx context.Context, tarballPath string) (*model.S
 			break
 		}
 		if attempt < maxFetchRetries {
-			fetchSpinner.Update(fmt.Sprintf("Retrieving results (retry %d/%d)...", attempt, maxFetchRetries-1))
+			fetchPhase.SetMessage(fmt.Sprintf("Retrieving results (retry %d/%d)", attempt, maxFetchRetries-1))
 			time.Sleep(s.fetchRetryInterval)
 		}
 	}
-	fetchSpinner.Stop()
 	if err != nil {
+		fetchPhase.Fail()
+		progress.TaskbarClear(os.Stderr)
+		progress.ResetTitle(os.Stderr)
 		cli.PrintWarningf("Failed to retrieve results: %v", err)
 		cli.PrintWarningf("Scan completed successfully. Results are available with scan ID: %s", scanID)
 		return nil, &output.ErrResultsIncomplete{ScanID: scanID}
 	}
+	fetchPhase.Succeed("Results retrieved", scan.FormatElapsed(fetchPhase.Elapsed()))
 
 	// Handle SBOM/VEX downloads if requested
 	if s.sbomVEXOpts != nil && (s.sbomVEXOpts.GenerateSBOM || s.sbomVEXOpts.GenerateVEX) {
@@ -237,6 +258,19 @@ func (s *Scanner) ScanTarball(ctx context.Context, tarballPath string) (*model.S
 	}
 
 	result := buildScanResult(scanID, findings, s.client.IsDebug(), s.includeNonExploitable)
+
+	// The finale: arrow one-shot, findings reveal / all-clear, count-up —
+	// then release the ambient integrations.
+	progress.RenderFinale(os.Stderr, progress.FinaleData{
+		ScanID:     scanID,
+		TotalStr:   scan.FormatElapsed(time.Since(scanStart)),
+		Findings:   result.Findings,
+		BySeverity: result.Summary.BySeverity,
+	}, s.noProgress)
+	progress.Notify(os.Stderr, "Armis", fmt.Sprintf("scan complete · %d findings", len(result.Findings)))
+	progress.TaskbarClear(os.Stderr)
+	progress.ResetTitle(os.Stderr)
+
 	return result, nil
 }
 

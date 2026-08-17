@@ -906,7 +906,7 @@ func TestTarGzDirectory(t *testing.T) {
 		scanner := NewScanner(nil, true, "tenant", 100, true, time.Minute, false)
 
 		var buf bytes.Buffer
-		err := scanner.tarGzDirectory(tmpDir, &buf, nil)
+		err := scanner.tarGzDirectory(tmpDir, &buf, nil, nil)
 		if err != nil {
 			t.Fatalf("tarGzDirectory failed: %v", err)
 		}
@@ -972,7 +972,7 @@ func TestTarGzDirectory(t *testing.T) {
 		scanner := NewScanner(nil, true, "tenant", 100, true, time.Minute, false)
 
 		var buf bytes.Buffer
-		err := scanner.tarGzDirectory(tmpDir, &buf, nil)
+		err := scanner.tarGzDirectory(tmpDir, &buf, nil, nil)
 		if err != nil {
 			t.Fatalf("tarGzDirectory failed: %v", err)
 		}
@@ -1036,7 +1036,7 @@ func TestTarGzDirectory(t *testing.T) {
 		scanner := NewScanner(nil, true, "tenant", 100, true, time.Minute, false)
 
 		var buf bytes.Buffer
-		err := scanner.tarGzDirectory(tmpDir, &buf, nil)
+		err := scanner.tarGzDirectory(tmpDir, &buf, nil, nil)
 		if err != nil {
 			t.Fatalf("tarGzDirectory failed: %v", err)
 		}
@@ -1097,7 +1097,7 @@ func TestTarGzDirectory(t *testing.T) {
 		scanner := NewScanner(nil, true, "tenant", 100, true, time.Minute, false)
 
 		var buf bytes.Buffer
-		err := scanner.tarGzDirectory(tmpDir, &buf, nil)
+		err := scanner.tarGzDirectory(tmpDir, &buf, nil, nil)
 		if err != nil {
 			t.Fatalf("tarGzDirectory failed: %v", err)
 		}
@@ -1154,7 +1154,7 @@ func TestTarGzDirectory(t *testing.T) {
 		scanner := NewScanner(nil, true, "tenant", 100, true, time.Minute, false)
 
 		var buf bytes.Buffer
-		err := scanner.tarGzDirectory(tmpDir, &buf, nil)
+		err := scanner.tarGzDirectory(tmpDir, &buf, nil, nil)
 		if err != nil {
 			t.Fatalf("tarGzDirectory failed: %v", err)
 		}
@@ -1202,7 +1202,7 @@ func TestTarGzDirectory(t *testing.T) {
 		scanner := NewScanner(nil, true, "tenant", 100, false, time.Minute, false) // includeTests = false
 
 		var buf bytes.Buffer
-		err := scanner.tarGzDirectory(tmpDir, &buf, nil)
+		err := scanner.tarGzDirectory(tmpDir, &buf, nil, nil)
 		if err != nil {
 			t.Fatalf("tarGzDirectory failed: %v", err)
 		}
@@ -1257,7 +1257,7 @@ func TestTarGzDirectory(t *testing.T) {
 		scanner := NewScanner(nil, true, "tenant", 100, true, time.Minute, false) // includeTests = true
 
 		var buf bytes.Buffer
-		err := scanner.tarGzDirectory(tmpDir, &buf, nil)
+		err := scanner.tarGzDirectory(tmpDir, &buf, nil, nil)
 		if err != nil {
 			t.Fatalf("tarGzDirectory failed: %v", err)
 		}
@@ -1629,7 +1629,7 @@ func TestTarGzFiles(t *testing.T) {
 		scanner := NewScanner(nil, false, "tenant", 100, true, time.Minute, false)
 
 		var buf bytes.Buffer
-		err := scanner.tarGzFiles(tmpDir, []string{"main.go", "util.go"}, &buf)
+		err := scanner.tarGzFiles(tmpDir, []string{"main.go", "util.go"}, &buf, nil)
 		if err != nil {
 			t.Fatalf("tarGzFiles failed: %v", err)
 		}
@@ -1669,7 +1669,7 @@ func TestTarGzFiles(t *testing.T) {
 		scanner := NewScanner(nil, false, "tenant", 100, true, time.Minute, false)
 
 		var buf bytes.Buffer
-		err := scanner.tarGzFiles(tmpDir, []string{}, &buf)
+		err := scanner.tarGzFiles(tmpDir, []string{}, &buf, nil)
 
 		if err == nil {
 			t.Fatal("Expected error when no files to archive")
@@ -1690,7 +1690,7 @@ func TestTarGzFiles(t *testing.T) {
 		scanner := NewScanner(nil, false, "tenant", 100, true, time.Minute, false)
 
 		var buf bytes.Buffer
-		err := scanner.tarGzFiles(tmpDir, []string{"exists.go", "nonexistent.go"}, &buf)
+		err := scanner.tarGzFiles(tmpDir, []string{"exists.go", "nonexistent.go"}, &buf, nil)
 
 		if err != nil {
 			t.Fatalf("tarGzFiles failed: %v", err)
@@ -1711,7 +1711,7 @@ func TestTarGzFiles(t *testing.T) {
 		scanner := NewScanner(nil, false, "tenant", 100, true, time.Minute, false)
 
 		var buf bytes.Buffer
-		err := scanner.tarGzFiles(tmpDir, []string{"main.go", "subdir"}, &buf)
+		err := scanner.tarGzFiles(tmpDir, []string{"main.go", "subdir"}, &buf, nil)
 
 		if err != nil {
 			t.Fatalf("tarGzFiles failed: %v", err)
@@ -1723,7 +1723,7 @@ func TestTarGzFiles(t *testing.T) {
 		scanner := NewScanner(nil, false, "tenant", 100, true, time.Minute, false)
 
 		var buf bytes.Buffer
-		err := scanner.tarGzFiles(tmpDir, []string{"nonexistent1.go", "nonexistent2.go"}, &buf)
+		err := scanner.tarGzFiles(tmpDir, []string{"nonexistent1.go", "nonexistent2.go"}, &buf, nil)
 
 		if err == nil {
 			t.Fatal("Expected error when all files are non-existent")
@@ -1745,7 +1745,7 @@ func TestTarGzFiles(t *testing.T) {
 
 		var buf bytes.Buffer
 		// Include a path traversal attempt - this should be skipped
-		err := scanner.tarGzFiles(tmpDir, []string{"main.go", "../../../etc/passwd"}, &buf)
+		err := scanner.tarGzFiles(tmpDir, []string{"main.go", "../../../etc/passwd"}, &buf, nil)
 
 		if err != nil {
 			t.Fatalf("tarGzFiles failed: %v", err)

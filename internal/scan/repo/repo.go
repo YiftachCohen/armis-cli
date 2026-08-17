@@ -103,7 +103,7 @@ func (s *Scanner) Scan(ctx context.Context, path string) (*model.ScanResult, err
 	}
 
 	var rawSize int64
-	var tarFunc func(io.Writer) error
+	var tarFunc func(io.Writer, tarObserver) error
 	var suppressionConfig *SuppressionConfig
 
 	if s.includeFiles != nil {
@@ -130,8 +130,8 @@ func (s *Scanner) Scan(ctx context.Context, path string) (*model.ScanResult, err
 			return nil, fmt.Errorf("failed to calculate files size: %w", sizeErr)
 		}
 
-		tarFunc = func(w io.Writer) error {
-			return s.tarGzFiles(absPath, existing, w)
+		tarFunc = func(w io.Writer, observe tarObserver) error {
+			return s.tarGzFiles(absPath, existing, w, observe)
 		}
 	} else {
 		// Full directory scanning mode — walk tree for both ignore patterns and directives.
@@ -147,8 +147,8 @@ func (s *Scanner) Scan(ctx context.Context, path string) (*model.ScanResult, err
 			return nil, fmt.Errorf("failed to calculate directory size: %w", sizeErr)
 		}
 
-		tarFunc = func(w io.Writer) error {
-			return s.tarGzDirectory(absPath, w, ignoreMatcher)
+		tarFunc = func(w io.Writer, observe tarObserver) error {
+			return s.tarGzDirectory(absPath, w, ignoreMatcher, observe)
 		}
 	}
 
@@ -156,9 +156,10 @@ func (s *Scanner) Scan(ctx context.Context, path string) (*model.ScanResult, err
 		return nil, fmt.Errorf("directory size (%d bytes) exceeds maximum allowed size (%d bytes)", rawSize, MaxRepoSize)
 	}
 
-	spinner := progress.NewSpinnerWithContext(ctx, "Preparing repository for upload...", s.noProgress)
-	spinner.Start()
-	defer spinner.Stop()
+	scanStart := time.Now()
+	pkgPhase := progress.StartPhase(ctx, "Packaging repository", s.noProgress,
+		progress.WithStreamDepth(2), progress.WithTitleClock(scanStart))
+	defer pkgPhase.Fail()
 
 	// Write the tar.gz to a temp file first, then upload from disk. Real S3
 	// requires Content-Length on POST, so we need to know the *compressed*
@@ -188,7 +189,17 @@ func (s *Scanner) Scan(ctx context.Context, path string) (*model.ScanResult, err
 		return nil, ctx.Err()
 	default:
 	}
-	if tarErr := tarFunc(tmpFile); tarErr != nil {
+	// C1 counter + C3 stream: the tar walk is the source of truth for what
+	// is being packaged; every file updates the live counter and flows
+	// through the two-line stream beneath the status.
+	var walkedFiles, walkedBytes int64
+	observe := func(relPath string, size int64) {
+		walkedFiles++
+		walkedBytes += size
+		pkgPhase.SetDetail(progress.FormatCount(walkedFiles) + " files · " + progress.FormatBytes(walkedBytes))
+		pkgPhase.StreamLine(relPath)
+	}
+	if tarErr := tarFunc(tmpFile, observe); tarErr != nil {
 		return nil, fmt.Errorf("failed to tar directory: %w", tarErr)
 	}
 	if err := tmpFile.Sync(); err != nil {
@@ -201,14 +212,26 @@ func (s *Scanner) Scan(ctx context.Context, path string) (*model.ScanResult, err
 	if _, err := tmpFile.Seek(0, io.SeekStart); err != nil {
 		return nil, fmt.Errorf("failed to rewind tarball: %w", err)
 	}
+	pkgPhase.Succeed("Repository packaged", scan.FormatElapsed(pkgPhase.Elapsed())+
+		" · "+progress.FormatBytes(tarInfo.Size())+" · "+progress.FormatCount(walkedFiles)+" files")
 
-	spinner.Update("Uploading to Armis Cloud...")
+	upPhase := progress.StartPhase(ctx, "Uploading to Armis Cloud", s.noProgress,
+		progress.WithTitleClock(scanStart))
+	defer upPhase.Fail()
+	progress.TaskbarProgress(os.Stderr, 0)
+	totalSize := tarInfo.Size()
+	upload := progress.NewCountingReader(tmpFile, func(sent int64) {
+		upPhase.SetDetail(progress.FormatBytes(sent) + " / " + progress.FormatBytes(totalSize))
+		if totalSize > 0 {
+			progress.TaskbarProgress(os.Stderr, int(sent*100/totalSize))
+		}
+	})
 
 	ingestOpts := api.IngestOptions{
 		TenantID:     s.tenantID,
 		ArtifactType: "repo",
 		Filename:     filepath.Base(absPath) + ".tar.gz",
-		Data:         tmpFile,
+		Data:         upload,
 		Size:         tarInfo.Size(),
 	}
 	if s.sbomVEXOpts != nil {
@@ -232,33 +255,45 @@ func (s *Scanner) Scan(ctx context.Context, path string) (*model.ScanResult, err
 		return nil, fmt.Errorf("failed to close temp tarball: %w", err)
 	}
 
-	spinner.Stop()
+	upPhase.Succeed("Uploaded to Armis Cloud", scan.FormatElapsed(upPhase.Elapsed()))
 	styles := output.GetStyles()
-	fmt.Fprintf(os.Stderr, "%s %s\n\n",
-		styles.MutedText.Render("Scan initiated with ID:"),
-		styles.ScanID.Render(scanID))
+	idText := styles.ScanID.Render(scanID)
+	// G1: the scan ID is a real hyperlink when the console URL is configured.
+	if url := progress.ConsoleURL(scanID); url != "" {
+		idText = progress.Hyperlink(os.Stderr, idText, url)
+	}
+	fmt.Fprintf(os.Stderr, "%s %s\n",
+		styles.MutedText.Render("Scan ID:"), idText)
 
-	analysisSpinner := progress.NewSpinnerWithContext(ctx, "Scanning for security issues...", s.noProgress)
-	analysisSpinner.Start()
-	defer analysisSpinner.Stop()
-
+	anPhase := progress.StartPhase(ctx, "Scan initiated, preparing analysis", s.noProgress,
+		progress.WithTitleClock(scanStart))
+	defer anPhase.Fail()
+	progress.TaskbarBusy(os.Stderr)
+	verbsActive := false
 	_, err = s.client.WaitForIngest(ctx, s.tenantID, scanID, s.pollInterval, s.timeout,
 		func(status model.IngestStatusData) {
-			analysisSpinner.Update(scan.FormatScanStatus(status.ScanStatus, "Scanning for security issues..."))
+			// B9: while the backend sits in its opaque IN_PROGRESS state,
+			// rotate the narrative verbs; every other real status change
+			// replaces the message directly.
+			if strings.EqualFold(status.ScanStatus, "IN_PROGRESS") {
+				if !verbsActive {
+					anPhase.SetVerbs(scan.AnalysisVerbs)
+					verbsActive = true
+				}
+				return
+			}
+			verbsActive = false
+			msg := scan.FormatScanStatus(status.ScanStatus, "Scanning for security issues...")
+			anPhase.SetMessage(strings.TrimSuffix(msg, "..."))
 		})
-	elapsed := analysisSpinner.GetElapsed()
-	analysisSpinner.Stop()
 	if err != nil {
 		return nil, fmt.Errorf("failed to wait for scan: %w", err)
 	}
+	anPhase.Succeed("Analysis complete", scan.FormatElapsed(anPhase.Elapsed()))
 
-	fmt.Fprintf(os.Stderr, "%s %s\n\n",
-		styles.MutedText.Render("Scan completed in"),
-		styles.Duration.Render(scan.FormatElapsed(elapsed)))
-
-	fetchSpinner := progress.NewSpinnerWithContext(ctx, "Retrieving results...", s.noProgress)
-	fetchSpinner.Start()
-	defer fetchSpinner.Stop()
+	fetchPhase := progress.StartPhase(ctx, "Retrieving results", s.noProgress,
+		progress.WithTitleClock(scanStart))
+	defer fetchPhase.Fail()
 
 	var findings []model.NormalizedFinding
 	const maxFetchRetries = 5
@@ -271,18 +306,20 @@ func (s *Scanner) Scan(ctx context.Context, path string) (*model.ScanResult, err
 			break
 		}
 		if attempt < maxFetchRetries {
-			fetchSpinner.Update(fmt.Sprintf("Retrieving results (retry %d/%d)...", attempt, maxFetchRetries-1))
+			fetchPhase.SetMessage(fmt.Sprintf("Retrieving results (retry %d/%d)", attempt, maxFetchRetries-1))
 			time.Sleep(s.fetchRetryInterval)
 		}
 	}
 	if err != nil {
-		fetchSpinner.Stop()
+		fetchPhase.Fail()
+		progress.TaskbarClear(os.Stderr)
+		progress.ResetTitle(os.Stderr)
 		cli.PrintWarningf("Failed to retrieve results: %v", err)
 		cli.PrintWarningf("Scan completed successfully. Results are available with scan ID: %s", scanID)
 		return nil, &output.ErrResultsIncomplete{ScanID: scanID}
 	}
 
-	fetchSpinner.Stop()
+	fetchPhase.Succeed("Results retrieved", scan.FormatElapsed(fetchPhase.Elapsed()))
 
 	// Handle SBOM/VEX downloads if requested
 	if s.sbomVEXOpts != nil && (s.sbomVEXOpts.GenerateSBOM || s.sbomVEXOpts.GenerateVEX) {
@@ -309,10 +346,26 @@ func (s *Scanner) Scan(ctx context.Context, path string) (*model.ScanResult, err
 		result.Summary = recomputeSummary(result.Findings, totalSuppressed, result.Summary.FilteredNonExploitable)
 	}
 
+	// The finale: arrow one-shot, findings reveal / all-clear, count-up
+	// (F1/F2, E2+E3, F3) — then release the ambient integrations.
+	progress.RenderFinale(os.Stderr, progress.FinaleData{
+		ScanID:     scanID,
+		TotalStr:   scan.FormatElapsed(time.Since(scanStart)),
+		Findings:   result.Findings,
+		BySeverity: result.Summary.BySeverity,
+	}, s.noProgress)
+	progress.Notify(os.Stderr, "Armis", fmt.Sprintf("scan complete · %d findings", len(result.Findings)))
+	progress.TaskbarClear(os.Stderr)
+	progress.ResetTitle(os.Stderr)
+
 	return result, nil
 }
 
-func (s *Scanner) tarGzDirectory(sourcePath string, writer io.Writer, ignoreMatcher *IgnoreMatcher) (err error) {
+// tarObserver is called once per regular file added to the tarball, with the
+// repo-relative path and the file's size (C1 counter / C3 stream data).
+type tarObserver func(relPath string, size int64)
+
+func (s *Scanner) tarGzDirectory(sourcePath string, writer io.Writer, ignoreMatcher *IgnoreMatcher, observe tarObserver) (err error) {
 	gzWriter := gzip.NewWriter(writer)
 	defer func() {
 		if closeErr := gzWriter.Close(); closeErr != nil && err == nil {
@@ -385,6 +438,9 @@ func (s *Scanner) tarGzDirectory(sourcePath string, writer io.Writer, ignoreMatc
 			if _, err := io.Copy(tarWriter, file); err != nil {
 				return err
 			}
+			if observe != nil {
+				observe(header.Name, info.Size())
+			}
 		}
 
 		return nil
@@ -403,7 +459,7 @@ func isPathContained(baseDir, absPath string) bool {
 	return !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel)
 }
 
-func (s *Scanner) tarGzFiles(repoRoot string, files []string, writer io.Writer) (err error) {
+func (s *Scanner) tarGzFiles(repoRoot string, files []string, writer io.Writer, observe tarObserver) (err error) {
 	gzWriter := gzip.NewWriter(writer)
 	defer func() {
 		if closeErr := gzWriter.Close(); closeErr != nil && err == nil {
@@ -479,6 +535,9 @@ func (s *Scanner) tarGzFiles(repoRoot string, files []string, writer io.Writer) 
 		}
 		if closeErr != nil {
 			return closeErr
+		}
+		if observe != nil {
+			observe(header.Name, info.Size())
 		}
 		filesWritten++
 	}

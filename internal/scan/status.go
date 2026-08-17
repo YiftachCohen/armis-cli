@@ -30,6 +30,19 @@ func FormatScanStatus(scanStatus, inProgressMsg string) string {
 	}
 }
 
+// AnalysisVerbs are the narrative phases shown while the backend reports
+// IN_PROGRESS (spec feature B9). The backend exposes no finer-grained
+// status, so these are cosmetic narration of an opaque wait — every phrase
+// must describe work the scan pipeline genuinely performs. When a backend
+// events endpoint exists (spec §6.1), replace this rotation with real events.
+var AnalysisVerbs = []string{
+	"Scanning for security issues",
+	"Analyzing dependencies",
+	"Scanning for secrets",
+	"Tracing data flows",
+	"Evaluating exploitability",
+}
+
 // FormatElapsed formats a duration as a human-readable time string.
 // Examples: "45s", "2m 30s"
 func FormatElapsed(d time.Duration) string {
