@@ -87,6 +87,12 @@ Rendering contract:
   receipt; everything else is a no-op. This preserves today's CI output shape.
 - Timer `[mm:ss]` on the live line only (existing `formatDuration`).
 - Keep the 30-min safety timeout and context cancellation semantics.
+- **Live-region discipline (correctness-critical):** cursor-up arithmetic breaks
+  if any live line soft-wraps, so every live line MUST be width-truncated
+  (reuse the existing `maxMessageRunes`/`truncateMessage` logic) — and the
+  renderer must be the *only* writer to stderr while a region is active. Route
+  `cli.PrintWarning`-style messages through the renderer (erase region → print
+  warning → repaint region) or queue them until the phase ends.
 
 ## 5. Feature specs
 
@@ -117,8 +123,8 @@ AdaptiveColor light/dark). "Ready" = implementable now with local/existing data.
 | **C4** | Activity feed | ≤4 item lines under analysis status, newest bottom-bright, aging to dim; items = real scan events. | **Blocked on backend events endpoint** (§6) |
 | **D2** | Trail sparkle | Single `✦` (hue-drifting violet) appended to a receipt for ~800ms after landing. Currently ditched — implement last or never. | Ready, deprioritized |
 | **F1** | Arrow at every completion | Arrow one-shot + `Scan complete  <total>s` even when findings exist (mutually exclusive with F2-only philosophy; default off pending decision). | **Ready — needs decision** |
-| **G3** | Taskbar progress | OSC 9;4: `ESC]9;4;1;<pct>BEL` during determinate phases (upload), `ESC]9;4;3;0BEL` (indeterminate) during analysis, clear `ESC]9;4;0;0BEL` on exit. Windows Terminal/ConEmu; ignored elsewhere. | **Ready** |
-| **G5** | Desktop notification | On completion if scan ran > ~60s: OSC 777 `ESC]777;notify;Armis;scan complete · N findingsBEL` (and/or OSC 9). Support varies; harmless where ignored. | **Ready** |
+| **G3** | Taskbar progress | OSC 9;4: `ESC]9;4;1;<pct>BEL` during determinate phases (upload), `ESC]9;4;3;0BEL` (indeterminate) during analysis, clear `ESC]9;4;0;0BEL` on exit. **Emit only on positive detection** (`WT_SESSION` or `ConEmuANSI` env): OSC 9 is a namespace collision — iTerm2 historically treats OSC 9 as a desktop notification, and while modern terminals special-case `4;`-prefixed payloads, older ones may pop a garbage notification. Never blind-emit. | **Ready (gated)** |
+| **G5** | Desktop notification | On completion if scan ran > ~60s, dispatch by detected terminal: iTerm2 (`TERM_PROGRAM=iTerm.app`) → `ESC]9;<msg>BEL`; kitty → OSC 99; urxvt/foot → `ESC]777;notify;<title>;<body>BEL`. Default **off** for undetected terminals — do not spray unknown OSC at unknown emulators. | **Ready (gated, default off)** |
 
 ### The Armis arrow one-shot (used by F1/F2)
 
