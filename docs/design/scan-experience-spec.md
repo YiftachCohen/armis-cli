@@ -99,6 +99,12 @@ Rendering contract:
 Colors below refer to `internal/output/styles.go` tokens (Tailwind palette,
 AdaptiveColor light/dark). "Ready" = implementable now with local/existing data.
 
+**Normative rule:** where this document, the current Go code, and
+`scan-experience-prototype.html` disagree on any visual detail (glyphs, hex
+values, frame timing, easing), **the prototype wins** — its renderers are the
+approved look. Do not assume an existing Go implementation of a similarly-named
+effect already matches; diff it against the prototype's numbers first.
+
 ### Core (always on)
 
 | Code | Feature | Spec | Data | Status |
@@ -115,7 +121,7 @@ AdaptiveColor light/dark). "Ready" = implementable now with local/existing data.
 
 | Code | Feature | Spec | Status |
 |---|---|---|---|
-| **A1** | Spinner head | Classic frames `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` @100ms, `SpinnerChar` style, prefix of the live line. Off = two-space indent. | **Ready** (exists) |
+| **A1** | Spinner head | Frames `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`, prefix of the live line; off = two-space indent. **Not identical to the legacy spinner — two deliberate deltas** (this is what makes the prototype's version look better): (1) frame period **80ms**, not the legacy 100ms; (2) color is **AdaptiveColor{Light: `#7C3AED`, Dark: `#A78BFA`}** (violet-600 / violet-400) + bold — the legacy `SpinnerChar` uses `#7C3AED` on both themes, which reads heavy on dark backgrounds. Update `SpinnerChar` in `styles.go` accordingly (scan the few other `colorAccent` uses before touching the shared var — safest is a dedicated adaptive color for the spinner). | **Ready** (small delta from existing) |
 | **B5** | Breathing ellipsis | Trailing 3 dots cycle 0→3 (~640ms/step): newest dot bright accent, older mid-violet, absent dots dim. Replaces static `...`. | **Ready** |
 | **B9** | Narrative verbs | Live message rotates through phase verbs during `IN_PROGRESS`. **Honest version requires backend phase strings** (§6). Interim: ship off, or use only the real `FormatScanStatus` transitions. | **Needs backend / decision** |
 | **C3** | Packaging stream | ≤2 lines under the packaging status: most recent files from the tar walk callback; newest bottom (`✓` green + muted text), older dim. | **Ready** (same callback as C1) |
